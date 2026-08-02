@@ -16,6 +16,7 @@ from app.core.database import SessionLocal
 from app.core.encryption import decrypt_text
 from app.core.exceptions import AppError
 from app.models.ai import AIModel, AIProvider, Conversation, ConversationLink, ConversationMessage
+from app.models.p1 import ConversationSummary, DocumentLink
 from app.models.person import Person, PersonFact
 from app.models.support import PromptTemplate
 from app.models.topic import Topic, TopicNote
@@ -27,6 +28,7 @@ from app.schemas.conversation import (
     ConversationLinksUpdate,
     ConversationUpdate,
 )
+from app.services.retrieval_service import retrieve_chunks
 
 _RECENT_MESSAGES = 20
 _cancel_events: dict[str, asyncio.Event] = defaultdict(asyncio.Event)
@@ -47,6 +49,7 @@ class ConversationService:
         self.db = db
         self.conversations = ConversationRepository(db)
         self.messages = MessageRepository(db)
+        self._retrieved_chunks: list[dict] = []
 
     # ---- 会话 CRUD ----
 
@@ -144,6 +147,13 @@ class ConversationService:
             links.append(ConversationLink(conversation_id=conversation_id, topic_id=data.topic_id))
         for link in links:
             self.db.add(link)
+        if data.document_id is not None:
+            self.db.add(
+                DocumentLink(
+                    document_id=data.document_id,
+                    conversation_id=conversation_id,
+                )
+            )
         self.db.flush()
         self.db.expire_all()
         conversation = self.get_conversation(conversation_id)
@@ -198,6 +208,36 @@ class ConversationService:
                 summary = (note.plain_text or topic.description or "")[:500]
                 if summary:
                     system_parts.append(f"当前话题（{topic.name}）摘要：\n{summary}")
+
+        # 知识库检索：会话关联文件 + 人物/话题关联文件
+        conversation_docs = self.db.execute(
+            select(DocumentLink.document_id).where(
+                DocumentLink.conversation_id == conversation.id
+            )
+        ).scalars()
+        explicit_docs = [doc_id for doc_id in conversation_docs if doc_id is not None]
+        retrieved = retrieve_chunks(
+            self.db,
+            user_text,
+            document_ids=explicit_docs,
+            person_ids=[link.person_id for link in link_list if link.person_id],
+            topic_ids=[link.topic_id for link in link_list if link.topic_id],
+            top_k=5,
+        )
+        self._retrieved_chunks = retrieved
+        if retrieved:
+            sections = [
+                f"[{item['document_name']} 片段{item['chunk_index']}] {item['content']}"
+                for item in retrieved
+            ]
+            system_parts.append("相关资料片段：\n" + "\n".join(sections))
+
+        # 长期记忆（已接受项）
+        from app.services.memory_service import accepted_memory_lines
+
+        memory_lines = accepted_memory_lines(self.db)
+        if memory_lines:
+            system_parts.append("用户长期记忆：\n" + "\n".join(memory_lines))
 
         recent = self.db.execute(
             select(ConversationMessage)
@@ -274,6 +314,8 @@ class ConversationService:
             assistant_id = assistant.id
 
             context = self._build_context(conversation, user_text)
+            assistant.metadata_json = {"citations": self._retrieved_chunks}
+            db.commit()
             adapter = build_provider(provider, api_key)
             request = ChatRequest(model=model.model_id, messages=context)
             cancel_event = _cancel_events[str(conversation_id)]
@@ -307,8 +349,14 @@ class ConversationService:
                 if status == "failed":
                     yield self._sse({"type": "error", "message": error_message or "生成失败"})
                 else:
+                    citations = self._retrieved_chunks
                     yield self._sse(
-                        {"type": "done", "message_id": str(assistant_id), "status": status}
+                        {
+                            "type": "done",
+                            "message_id": str(assistant_id),
+                            "status": status,
+                            "citations": citations,
+                        }
                     )
         except AppError as exc:
             yield self._sse({"type": "error", "message": exc.message, "code": exc.code})
@@ -381,12 +429,52 @@ class ConversationService:
                     yield self._sse({"type": "error", "message": error_message or "生成失败"})
                 else:
                     yield self._sse(
-                        {"type": "done", "message_id": str(message_id), "status": status}
+                        {
+                            "type": "done",
+                            "message_id": str(message_id),
+                            "status": status,
+                            "citations": self._retrieved_chunks,
+                        }
                     )
         except AppError as exc:
             yield self._sse({"type": "error", "message": exc.message, "code": exc.code})
         finally:
             db.close()
+
+    async def summarize(self, conversation_id: uuid.UUID) -> str:
+        """生成并保存对话摘要（长对话压缩）。"""
+        conversation = self.get_conversation(conversation_id)
+        provider, model, api_key = self._resolve_provider_and_model(conversation, None)
+        messages = self.db.execute(
+            select(ConversationMessage)
+            .where(ConversationMessage.conversation_id == conversation_id)
+            .order_by(ConversationMessage.created_at.asc())
+        ).scalars()
+        transcript = "\n".join(
+            f"{'用户' if m.role == 'user' else 'AI'}：{m.content or ''}"
+            for m in messages
+            if m.content
+        )
+        request = ChatRequest(
+            model=model.model_id,
+            messages=[
+                ChatMessage(
+                    role="system",
+                    content="请把下面的对话压缩为简洁的中文摘要，保留明确事实、用户偏好与未完成事项。",
+                ),
+                ChatMessage(role="user", content=transcript[-8000:]),
+            ],
+        )
+        adapter = build_provider(provider, api_key)
+        try:
+            response = await adapter.chat(request)
+        except ProviderError as exc:
+            raise AppError("AI_PROVIDER_ERROR", str(exc), status_code=400) from exc
+        summary = response.content.strip()
+        self.db.add(ConversationSummary(conversation_id=conversation_id, summary=summary))
+        conversation.summary = summary
+        self.db.commit()
+        return summary
 
     @staticmethod
     def cancel(conversation_id: uuid.UUID) -> None:

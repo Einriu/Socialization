@@ -15,6 +15,12 @@ import {
   updateFollowUp,
 } from "@/api/persons";
 import { listTags } from "@/api/tags";
+import {
+  getCustomValues,
+  listCustomFields,
+  setCustomValues,
+} from "@/api/custom-fields";
+import { generateBriefing } from "@/api/p2";
 import type {
   FollowUpTask,
   ImportantDate,
@@ -22,6 +28,7 @@ import type {
   PersonFact,
   Tag,
   TimelineItem,
+  CustomField,
 } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { ErrorText, Field, Select, TextInput } from "@/components/ui/field";
@@ -53,6 +60,9 @@ export function PersonDetailPage() {
   const [dates, setDates] = useState<ImportantDate[]>([]);
   const [followUps, setFollowUps] = useState<FollowUpTask[]>([]);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
+  const [customFields, setCustomFields] = useState<CustomField[]>([]);
+  const [customValues, setCustomValuesState] = useState<Record<string, unknown>>({});
+  const [briefing, setBriefing] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   // 事实表单
@@ -69,13 +79,15 @@ export function PersonDetailPage() {
 
   const load = useCallback(async () => {
     try {
-      const [p, f, d, fu, t, tags] = await Promise.all([
+      const [p, f, d, fu, t, tags, fields, values] = await Promise.all([
         getPerson(personId),
         listFacts(personId),
         listDates(personId),
         listFollowUps(personId),
         getTimeline(personId),
         listTags(),
+        listCustomFields(),
+        getCustomValues(personId),
       ]);
       setPerson(p);
       setFacts(f.items);
@@ -83,6 +95,8 @@ export function PersonDetailPage() {
       setFollowUps(fu.items);
       setTimeline(t.items);
       setAllTags(tags.items);
+      setCustomFields(fields);
+      setCustomValuesState(values);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载失败");
@@ -179,6 +193,27 @@ export function PersonDetailPage() {
     }
   };
 
+  const saveCustomValue = async (fieldId: string, value: unknown) => {
+    try {
+      const values = await setCustomValues(personId, {
+        ...customValues,
+        [fieldId]: value,
+      });
+      setCustomValuesState(values);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "保存自定义字段失败");
+    }
+  };
+
+  const loadBriefing = async () => {
+    setBriefing("生成中…");
+    try {
+      setBriefing(await generateBriefing(personId));
+    } catch (e) {
+      setBriefing(e instanceof Error ? e.message : "生成失败");
+    }
+  };
+
   return (
     <main className="mx-auto w-full max-w-4xl space-y-8 px-6 py-10">
       <div className="flex items-start justify-between">
@@ -192,6 +227,9 @@ export function PersonDetailPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => void loadBriefing()}>
+            聊天简报
+          </Button>
           <Button variant="outline" onClick={() => navigate(`/persons/${person.id}/edit`)}>
             编辑
           </Button>
@@ -204,6 +242,9 @@ export function PersonDetailPage() {
       <ErrorText message={error} />
 
       {person.summary && <p className="rounded-lg border bg-card p-4 text-sm">{person.summary}</p>}
+      {briefing && (
+        <section className="whitespace-pre-wrap rounded-lg border bg-card p-4 text-sm">{briefing}</section>
+      )}
 
       <section className="space-y-3">
         <h2 className="text-lg font-medium">标签</h2>
@@ -365,6 +406,24 @@ export function PersonDetailPage() {
           ))}
           {followUps.length === 0 && <li className="text-sm text-muted-foreground">暂无待跟进事项</li>}
         </ul>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-medium">自定义字段</h2>
+        <div className="grid grid-cols-1 gap-3 rounded-lg border bg-card p-4 md:grid-cols-2">
+          {customFields.map((field) => (
+            <label key={field.id} className="space-y-1">
+              <span className="text-sm text-muted-foreground">{field.name}</span>
+              <TextInput
+                defaultValue={String(customValues[field.id] ?? "")}
+                onBlur={(e) => void saveCustomValue(field.id, e.target.value)}
+              />
+            </label>
+          ))}
+          {customFields.length === 0 && (
+            <p className="text-sm text-muted-foreground">暂无自定义字段（可在设置页创建）</p>
+          )}
+        </div>
       </section>
 
       <section className="space-y-3">

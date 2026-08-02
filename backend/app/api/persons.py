@@ -27,6 +27,7 @@ from app.schemas.person import (
 )
 from app.schemas.tag import PersonTagsUpdate
 from app.services.person_service import PersonService
+from app.services.social_service import generate_briefing
 
 router = APIRouter()
 
@@ -201,6 +202,12 @@ def list_follow_ups(
         page_size=page_size,
     )
     return success_response(payload)
+
+
+@router.post("/persons/{person_id}/briefing")
+async def briefing(person_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    text = await generate_briefing(db, person_id)
+    return success_response({"briefing": text})
 
 
 @router.post("/persons/{person_id}/follow-ups")

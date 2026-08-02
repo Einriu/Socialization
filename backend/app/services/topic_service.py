@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.exceptions import AppError
@@ -225,6 +225,18 @@ class TopicService:
             note.content_json = data.content_json
             note.plain_text = data.plain_text
         self.db.flush()
+        self.db.execute(
+            text("DELETE FROM fts_notes WHERE topic_id = :tid"),
+            {"tid": str(topic_id)},
+        )
+        if note.plain_text:
+            self.db.execute(
+                text(
+                    "INSERT INTO fts_notes(plain_text, topic_id, id) "
+                    "VALUES (:plain, :tid, :id)"
+                ),
+                {"plain": note.plain_text, "tid": str(topic_id), "id": str(note.id)},
+            )
         return note
 
 

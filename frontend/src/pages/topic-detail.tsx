@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listPersons } from "@/api/persons";
+import { listDocuments, setDocumentLinks } from "@/api/documents";
 import { deleteTopic, getNote, getTopic, saveNote, setTopicPersons } from "@/api/topics";
-import type { Person, Topic, TopicNote } from "@/api/types";
+import type { DocumentRecord, Person, Topic, TopicNote } from "@/api/types";
 import { NoteEditor } from "@/components/editor/note-editor";
 import { Button } from "@/components/ui/button";
-import { ErrorText } from "@/components/ui/field";
+import { ErrorText, Select } from "@/components/ui/field";
 import { matchRoute, useRouter } from "@/lib/router";
 
 export function TopicDetailPage() {
@@ -13,16 +14,27 @@ export function TopicDetailPage() {
   const [topic, setTopic] = useState<Topic | null>(null);
   const [note, setNote] = useState<TopicNote | null>(null);
   const [persons, setPersons] = useState<Person[]>([]);
+  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [allDocuments, setAllDocuments] = useState<DocumentRecord[]>([]);
+  const [linkDocId, setLinkDocId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState("已就绪");
   const savingRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
-      const [t, n, p] = await Promise.all([getTopic(topicId), getNote(topicId), listPersons({ pageSize: 100 })]);
+      const [t, n, p, docs, allDocs] = await Promise.all([
+        getTopic(topicId),
+        getNote(topicId),
+        listPersons({ pageSize: 100 }),
+        listDocuments({ topicId, pageSize: 50 }),
+        listDocuments({ pageSize: 100 }),
+      ]);
       setTopic(t);
       setNote(n);
       setPersons(p.items);
+      setDocuments(docs.items);
+      setAllDocuments(allDocs.items);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载失败");
@@ -83,6 +95,16 @@ export function TopicDetailPage() {
     }
   };
 
+  const linkDocument = async (documentId: string) => {
+    try {
+      await setDocumentLinks(documentId, { topic_id: topicId });
+      setLinkDocId("");
+      void load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "关联文件失败");
+    }
+  };
+
   const handleDelete = async () => {
     if (!window.confirm(`确认删除话题「${topic.name}」？`)) {
       return;
@@ -125,6 +147,43 @@ export function TopicDetailPage() {
               </label>
             );
           })}
+        </div>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-sm font-medium text-muted-foreground">关联文件</h2>
+        <div className="flex flex-wrap gap-2">
+          {documents.map((document) => (
+            <span key={document.id} className="rounded border px-2.5 py-1 text-sm">
+              {document.filename}
+            </span>
+          ))}
+          {documents.length === 0 && (
+            <span className="text-sm text-muted-foreground">未关联文件</span>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Select className="w-56" value={linkDocId} onChange={(e) => setLinkDocId(e.target.value)}>
+            <option value="">选择文件关联</option>
+            {allDocuments
+              .filter((document) => document.status === "completed")
+              .map((document) => (
+                <option key={document.id} value={document.id}>
+                  {document.filename}
+                </option>
+              ))}
+          </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (linkDocId) {
+                void linkDocument(linkDocId);
+              }
+            }}
+          >
+            关联
+          </Button>
         </div>
       </section>
 

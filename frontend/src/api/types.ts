@@ -246,5 +246,61 @@ export interface ConversationMessage {
   token_output: number | null;
   latency_ms: number | null;
   generated_by_ai: boolean;
+  metadata: { citations?: Citation[] } | null;
   created_at: string;
+}
+
+export interface Citation {
+  chunk_id: string;
+  document_id: string;
+  document_name: string;
+  chunk_index: number;
+  page_start: number | null;
+  page_end: number | null;
+  content: string;
+  score: number;
+}
+
+export interface DocumentRecord {
+  id: string;
+  filename: string;
+  file_size: number;
+  mime_type: string | null;
+  status: string;
+  parse_version: number;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+  chunk_count: number;
+  person_ids: string[];
+  topic_ids: string[];
+}
+
+export interface DocumentChunkItem {
+  id: string;
+  chunk_index: number;
+  page_start: number | null;
+  page_end: number | null;
+  heading_path: string | null;
+  content: string;
+  token_count: number | null;
+}
+
+export interface CustomField {
+  id: string;
+  field_type: string;
+  name: string;
+  group_name: string | null;
+  options: string[] | null;
+  is_required: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface SearchResult {
+  persons: { id: string; name: string; type: string }[];
+  topics: { id: string; name: string; type: string }[];
+  interactions: { id: string; title: string; type: string }[];
+  notes: { id: string; name: string; type: string }[];
+  documents: { id: string; name: string; type: string }[];
 }

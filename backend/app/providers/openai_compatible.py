@@ -98,6 +98,13 @@ class OpenAICompatibleProvider(BaseAIProvider):
                     if delta:
                         yield delta
 
+    async def create_embeddings(self, model: str, texts: list[str]) -> list[list[float]]:
+        """调用 /embeddings 生成向量（OpenAI 兼容）。"""
+        data = await self._request_json(
+            "POST", "/embeddings", {"model": model, "input": texts}
+        )
+        return [item["embedding"] for item in data.get("data", [])]
+
 
 async def asyncio_sleep(seconds: float) -> None:
     """避免在模块顶层直接依赖 asyncio 语义的辅助函数。"""

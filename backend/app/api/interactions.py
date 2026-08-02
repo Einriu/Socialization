@@ -11,7 +11,14 @@ from app.core.database import get_db
 from app.core.response import success_response
 from app.schemas.common import Page
 from app.schemas.interaction import InteractionCreate, InteractionRead, InteractionUpdate
+from app.schemas.p2 import ConfirmExtractions
 from app.services.interaction_service import InteractionService
+from app.services.social_service import (
+    confirm_extractions,
+    extract_interaction,
+    list_pending_extractions,
+    review_interaction,
+)
 
 router = APIRouter()
 
@@ -68,3 +75,53 @@ def delete_interaction(
 ) -> Response:
     InteractionService(db).delete_interaction(interaction_id)
     return Response(status_code=204)
+
+
+@router.post("/interactions/{interaction_id}/extract")
+async def extract_facts(interaction_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    items = await extract_interaction(db, interaction_id)
+    return success_response(
+        [
+            {
+                "id": str(item.id),
+                "kind": item.kind,
+                "fact_type": item.fact_type,
+                "content": item.content,
+                "status": item.status,
+            }
+            for item in items
+        ]
+    )
+
+
+@router.get("/interactions/{interaction_id}/extractions")
+def pending_extractions(interaction_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    items = list_pending_extractions(db, interaction_id)
+    return success_response(
+        [
+            {
+                "id": str(item.id),
+                "kind": item.kind,
+                "fact_type": item.fact_type,
+                "content": item.content,
+                "status": item.status,
+            }
+            for item in items
+        ]
+    )
+
+
+@router.post("/interactions/{interaction_id}/confirm-extractions")
+def confirm_facts(
+    interaction_id: uuid.UUID,
+    data: ConfirmExtractions,
+    db: Session = Depends(get_db),
+) -> dict:
+    result = confirm_extractions(db, data.ids)
+    return success_response(result)
+
+
+@router.post("/interactions/{interaction_id}/review")
+async def review(interaction_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    text = await review_interaction(db, interaction_id)
+    return success_response({"review": text})

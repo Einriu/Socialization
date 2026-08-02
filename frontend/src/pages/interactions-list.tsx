@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { deleteInteraction, listInteractions } from "@/api/interactions";
 import { listPersons } from "@/api/persons";
+import {
+  confirmExtractions,
+  extractInteraction,
+  getPendingExtractions,
+  reviewInteraction,
+  type ExtractionItem,
+} from "@/api/p2";
 import type { Interaction, Person } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { ErrorText, Select } from "@/components/ui/field";
@@ -28,6 +35,8 @@ export function InteractionsListPage() {
   const [persons, setPersons] = useState<Person[]>([]);
   const [personId, setPersonId] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<Record<string, ExtractionItem[]>>({});
+  const [reviewText, setReviewText] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     try {
@@ -59,6 +68,43 @@ export function InteractionsListPage() {
       void load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "删除失败");
+    }
+  };
+
+  const runExtract = async (item: Interaction) => {
+    try {
+      const extracted = await extractInteraction(item.id);
+      setPending((prev) => ({ ...prev, [item.id]: extracted }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "提取失败");
+    }
+  };
+
+  const loadPending = async (item: Interaction) => {
+    try {
+      const extracted = await getPendingExtractions(item.id);
+      setPending((prev) => ({ ...prev, [item.id]: extracted }));
+    } catch {
+      // 忽略
+    }
+  };
+
+  const confirm = async (item: Interaction, extracts: ExtractionItem[]) => {
+    try {
+      await confirmExtractions(item.id, extracts.map((x) => x.id));
+      setPending((prev) => ({ ...prev, [item.id]: [] }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "确认失败");
+    }
+  };
+
+  const review = async (item: Interaction) => {
+    try {
+      setReviewText((prev) => ({ ...prev, [item.id]: "生成中…" }));
+      const text = await reviewInteraction(item.id);
+      setReviewText((prev) => ({ ...prev, [item.id]: text }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "复盘失败");
     }
   };
 
@@ -127,11 +173,37 @@ export function InteractionsListPage() {
                   >
                     编辑
                   </Button>
+                  <Button variant="outline" size="sm" onClick={() => void loadPending(item)}>
+                    待确认
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => void runExtract(item)}>
+                    提取
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => void review(item)}>
+                    复盘
+                  </Button>
                   <Button variant="destructive" size="sm" onClick={() => void handleDelete(item)}>
                     删除
                   </Button>
                 </div>
               </div>
+              {pending[item.id] && pending[item.id].length > 0 && (
+                <div className="mt-2 space-y-1 border-t pt-2 text-sm">
+                  {pending[item.id].map((extract) => (
+                    <p key={extract.id} className="text-muted-foreground">
+                      {extract.kind === "follow_up" ? "待跟进" : extract.fact_type}：{extract.content}
+                    </p>
+                  ))}
+                  <Button size="sm" onClick={() => void confirm(item, pending[item.id])}>
+                    全部确认写入
+                  </Button>
+                </div>
+              )}
+              {reviewText[item.id] && (
+                <p className="mt-2 whitespace-pre-wrap border-t pt-2 text-sm text-muted-foreground">
+                  {reviewText[item.id]}
+                </p>
+              )}
             </li>
           ))}
         </ul>

@@ -18,6 +18,8 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB_PATH.as_posix()}"
 os.environ["APP_VERSION"] = "0.0.0-test"
 os.environ["DATA_DIR"] = str(_TEST_DATA_DIR)
 
+from sqlalchemy import text  # noqa: E402
+
 from app.core.database import SessionLocal  # noqa: E402
 from app.core.database import engine as app_engine  # noqa: E402
 from app.main import create_app  # noqa: E402
@@ -28,6 +30,21 @@ from app.models import Base as ModelBase  # noqa: E402
 def _prepare_db() -> None:
     """会话开始前建表，结束后释放引擎并清理临时数据库文件。"""
     ModelBase.metadata.create_all(bind=app_engine)
+    with app_engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS fts_documents"))
+        conn.execute(text("DROP TABLE IF EXISTS fts_notes"))
+        conn.execute(
+            text(
+                "CREATE VIRTUAL TABLE IF NOT EXISTS fts_documents USING fts5("
+                "content, document_id UNINDEXED, chunk_index UNINDEXED, id UNINDEXED)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE VIRTUAL TABLE IF NOT EXISTS fts_notes USING fts5("
+                "plain_text, topic_id UNINDEXED, id UNINDEXED)"
+            )
+        )
     yield
     app_engine.dispose()
     for suffix in ("", "-wal", "-shm"):
@@ -45,6 +62,8 @@ def _clean_between_tests() -> None:
     with SessionLocal() as db:
         for table in reversed(ModelBase.metadata.sorted_tables):
             db.execute(table.delete())
+        db.execute(text("DELETE FROM fts_documents"))
+        db.execute(text("DELETE FROM fts_notes"))
         db.commit()
     yield
 

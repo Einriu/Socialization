@@ -63,3 +63,7 @@ class BaseAIProvider(ABC):
     @abstractmethod
     async def stream_chat(self, request: ChatRequest) -> AsyncIterator[str]:
         """流式对话，逐块产出增量文本。"""
+
+    async def create_embeddings(self, model: str, texts: list[str]) -> list[list[float]]:
+        """可选：生成文本向量，默认不支持。"""
+        raise ProviderError("该提供商不支持嵌入")

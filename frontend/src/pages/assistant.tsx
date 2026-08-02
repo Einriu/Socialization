@@ -13,7 +13,16 @@ import {
 import { listPersons } from "@/api/persons";
 import { listModels, listProviders } from "@/api/providers";
 import { listTopics } from "@/api/topics";
-import type { AIModel, Conversation, Person, Provider, Topic } from "@/api/types";
+import { listDocuments } from "@/api/documents";
+import type {
+  AIModel,
+  Citation,
+  Conversation,
+  DocumentRecord,
+  Person,
+  Provider,
+  Topic,
+} from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { ErrorText, Select, TextArea } from "@/components/ui/field";
 import { parseSse } from "@/utils/sse";
@@ -24,6 +33,7 @@ interface LocalMessage {
   content: string;
   status: string;
   generated_by_ai: boolean;
+  metadata: { citations?: Citation[] } | null;
 }
 
 export function AssistantPage() {
@@ -38,6 +48,8 @@ export function AssistantPage() {
   const [modelId, setModelId] = useState("");
   const [linkPersonId, setLinkPersonId] = useState("");
   const [linkTopicId, setLinkTopicId] = useState("");
+  const [linkDocumentId, setLinkDocumentId] = useState("");
+  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,14 +67,16 @@ export function AssistantPage() {
 
   const loadOptions = useCallback(async () => {
     try {
-      const [p, t, personsData] = await Promise.all([
+      const [p, t, personsData, docs] = await Promise.all([
         listProviders(),
         listTopics({ pageSize: 100 }),
         listPersons({ pageSize: 100 }),
+        listDocuments({ pageSize: 100 }),
       ]);
       setProviders(p.items);
       setTopics(t.items);
       setPersons(personsData.items);
+      setDocuments(docs.items);
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载选项失败");
     }
@@ -101,6 +115,7 @@ export function AssistantPage() {
             content: item.content ?? "",
             status: item.status,
             generated_by_ai: item.generated_by_ai,
+            metadata: item.metadata ?? null,
           })),
         );
       } catch (e) {
@@ -143,6 +158,7 @@ export function AssistantPage() {
     await setLinks(currentId, {
       person_id: linkPersonId || null,
       topic_id: linkTopicId || null,
+      document_id: linkDocumentId || null,
     });
     void loadConversations();
   };
@@ -157,6 +173,7 @@ export function AssistantPage() {
       content: content.trim(),
       status: "completed",
       generated_by_ai: false,
+      metadata: null,
     };
     const assistantMessage: LocalMessage = {
       id: `local-ai-${Date.now()}`,
@@ -164,6 +181,7 @@ export function AssistantPage() {
       content: "",
       status: "generating",
       generated_by_ai: true,
+      metadata: null,
     };
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
     setInput("");
@@ -189,7 +207,13 @@ export function AssistantPage() {
           setMessages((prev) =>
             prev.map((item) =>
               item.id === assistantMessage.id
-                ? { ...item, status: String(event.status ?? "completed") }
+                ? {
+                    ...item,
+                    status: String(event.status ?? "completed"),
+                    metadata: {
+                      citations: (event.citations as Citation[] | undefined) ?? [],
+                    },
+                  }
                 : item,
             ),
           );
@@ -346,6 +370,21 @@ export function AssistantPage() {
                     </option>
                   ))}
                 </Select>
+                <Select
+                  className="w-44"
+                  value={linkDocumentId}
+                  onChange={(e) => setLinkDocumentId(e.target.value)}
+                  aria-label="关联文件"
+                >
+                  <option value="">不关联文件</option>
+                  {documents
+                    .filter((d) => d.status === "completed")
+                    .map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.filename}
+                      </option>
+                    ))}
+                </Select>
                 <Button variant="outline" size="sm" onClick={() => void saveSettings()}>
                   应用设置
                 </Button>
@@ -384,6 +423,14 @@ export function AssistantPage() {
                                 复制
                               </button>
                             </>
+                          )}
+                          {message.metadata?.citations && message.metadata.citations.length > 0 && (
+                            <span>
+                              引用：
+                              {message.metadata.citations
+                                .map((citation) => citation.document_name)
+                                .join("、")}
+                            </span>
                           )}
                         </div>
                       )}

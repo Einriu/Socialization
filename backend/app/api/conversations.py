@@ -156,3 +156,11 @@ def get_links(conversation_id: uuid.UUID, db: Session = Depends(get_db)) -> dict
             for link in conversation.links
         ]
     )
+
+
+@router.post("/conversations/{conversation_id}/summarize")
+async def summarize_conversation(
+    conversation_id: uuid.UUID, db: Session = Depends(get_db)
+) -> dict:
+    summary = await ConversationService(db).summarize(conversation_id)
+    return success_response({"summary": summary})

@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
+  createBackup,
+  downloadBackupUrl,
+  exportJson,
+  importJson,
+  listBackups,
+  restoreBackup,
+  type BackupRecord,
+} from "@/api/backup";
+import {
   createModel,
   createProvider,
   deleteModel,
@@ -14,6 +23,12 @@ import {
 import type { AIModel, Provider } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { ErrorText, Field, Select, TextInput } from "@/components/ui/field";
+import {
+  createCustomField,
+  deleteCustomField,
+  listCustomFields,
+} from "@/api/custom-fields";
+import type { CustomField } from "@/api/types";
 
 export function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -23,6 +38,14 @@ export function ProvidersPage() {
   const [testResult, setTestResult] = useState<string | null>(null);
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [newModelId, setNewModelId] = useState("");
+  // 备份区
+  const [backups, setBackups] = useState<BackupRecord[]>([]);
+  const [backupError, setBackupError] = useState<string | null>(null);
+  const [backupStatus, setBackupStatus] = useState("");
+  // 自定义字段定义
+  const [customFields, setCustomFields] = useState<CustomField[]>([]);
+  const [newFieldName, setNewFieldName] = useState("");
+  const [newFieldType, setNewFieldType] = useState("text");
 
   // 新建/编辑表单
   const [form, setForm] = useState({
@@ -47,6 +70,14 @@ export function ProvidersPage() {
     }
   }, []);
 
+  const loadBackups = useCallback(async () => {
+    try {
+      setBackups(await listBackups());
+    } catch (e) {
+      setBackupError(e instanceof Error ? e.message : "加载备份失败");
+    }
+  }, []);
+
   const loadModels = useCallback(async (providerId: string) => {
     try {
       setModels(await listModels(providerId));
@@ -57,7 +88,35 @@ export function ProvidersPage() {
 
   useEffect(() => {
     void loadProviders();
-  }, [loadProviders]);
+    void loadBackups();
+    void listCustomFields()
+      .then(setCustomFields)
+      .catch(() => undefined);
+  }, [loadProviders, loadBackups]);
+
+  const addCustomField = async () => {
+    if (!newFieldName.trim()) {
+      return;
+    }
+    try {
+      await createCustomField({
+        field_type: newFieldType,
+        name: newFieldName.trim(),
+      });
+      setNewFieldName("");
+      setCustomFields(await listCustomFields());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "创建字段失败");
+    }
+  };
+
+  const removeCustomField = async (field: CustomField) => {
+    if (!window.confirm(`确认删除自定义字段「${field.name}」？`)) {
+      return;
+    }
+    await deleteCustomField(field.id);
+    setCustomFields(await listCustomFields());
+  };
 
   useEffect(() => {
     if (selectedId) {
@@ -180,6 +239,61 @@ export function ProvidersPage() {
       setModels([]);
     }
     void loadProviders();
+  };
+
+  const handleExportJson = async () => {
+    try {
+      const data = await exportJson();
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `socialization-export-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setBackupStatus("JSON 已导出");
+    } catch (e) {
+      setBackupError(e instanceof Error ? e.message : "导出失败");
+    }
+  };
+
+  const handleImportJson = async (file: File) => {
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text) as Record<string, unknown>;
+      const result = await importJson(payload);
+      const total = Object.values(result.imported).reduce((sum, n) => sum + n, 0);
+      setBackupStatus(`导入完成：共 ${total} 条记录`);
+      void loadBackups();
+      window.location.reload();
+    } catch (e) {
+      setBackupError(e instanceof Error ? e.message : "导入失败");
+    }
+  };
+
+  const handleCreateBackup = async () => {
+    try {
+      const record = await createBackup();
+      setBackupStatus(`备份已创建：${record.filename}`);
+      void loadBackups();
+    } catch (e) {
+      setBackupError(e instanceof Error ? e.message : "备份失败");
+    }
+  };
+
+  const handleRestore = async (backup: BackupRecord) => {
+    if (!window.confirm(`确认从「${backup.filename}」恢复？恢复前会自动生成安全快照。`)) {
+      return;
+    }
+    try {
+      const result = await restoreBackup(backup.id);
+      setBackupStatus(`恢复完成（${result.restored_from}），安全快照：${result.safety_snapshot}`);
+      window.location.reload();
+    } catch (e) {
+      setBackupError(e instanceof Error ? e.message : "恢复失败");
+    }
   };
 
   return (
@@ -351,6 +465,90 @@ export function ProvidersPage() {
             ))}
           </ul>
         )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-medium">数据备份</h2>
+        <div className="flex flex-wrap gap-3 rounded-lg border bg-card p-4">
+          <Button variant="outline" onClick={() => void handleExportJson()}>
+            导出 JSON
+          </Button>
+          <label className="inline-flex cursor-pointer items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm shadow-sm hover:bg-accent">
+            导入 JSON
+            <input
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  void handleImportJson(file);
+                }
+                e.target.value = "";
+              }}
+            />
+          </label>
+          <Button onClick={() => void handleCreateBackup()}>创建备份</Button>
+          {backupStatus && <span className="self-center text-sm text-muted-foreground">{backupStatus}</span>}
+        </div>
+        {backupError && <p className="text-sm text-destructive">{backupError}</p>}
+        {backups.length > 0 && (
+          <ul className="space-y-2">
+            {backups.map((backup) => (
+              <li key={backup.id} className="flex items-center justify-between rounded-lg border bg-card p-3 text-sm">
+                <span>
+                  {backup.filename}（{(backup.size_bytes / 1024).toFixed(1)} KB ·{" "}
+                  {new Date(backup.created_at).toLocaleString("zh-CN", { hour12: false })}）
+                </span>
+                <span className="flex gap-2">
+                  <a className="text-primary underline" href={downloadBackupUrl(backup.id)} download>
+                    下载
+                  </a>
+                  <button type="button" className="text-destructive underline" onClick={() => void handleRestore(backup)}>
+                    恢复
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-medium">自定义字段定义</h2>
+        <div className="flex flex-wrap gap-2 rounded-lg border bg-card p-4">
+          <TextInput
+            className="w-56"
+            placeholder="字段名，如：喜欢的咖啡"
+            value={newFieldName}
+            onChange={(e) => setNewFieldName(e.target.value)}
+          />
+          <Select
+            className="w-40"
+            value={newFieldType}
+            onChange={(e) => setNewFieldType(e.target.value)}
+          >
+            <option value="text">单行文本</option>
+            <option value="textarea">多行文本</option>
+            <option value="number">数字</option>
+            <option value="date">日期</option>
+            <option value="link">链接</option>
+            <option value="boolean">布尔</option>
+          </Select>
+          <Button variant="outline" onClick={() => void addCustomField()}>
+            添加字段
+          </Button>
+        </div>
+        <ul className="flex flex-wrap gap-2">
+          {customFields.map((field) => (
+            <li key={field.id} className="flex items-center gap-2 rounded border px-2.5 py-1 text-sm">
+              {field.name}
+              <Button variant="ghost" size="sm" onClick={() => void removeCustomField(field)}>
+                删
+              </Button>
+            </li>
+          ))}
+        </ul>
       </section>
     </main>
   );

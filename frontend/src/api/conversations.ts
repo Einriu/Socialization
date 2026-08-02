@@ -72,7 +72,7 @@ export function regenerateStream(
 
 export function setLinks(
   conversationId: string,
-  input: { person_id?: string | null; topic_id?: string | null },
+  input: { person_id?: string | null; topic_id?: string | null; document_id?: string | null },
 ): Promise<ConversationLink[]> {
   return request<ConversationLink[]>(`/api/conversations/${conversationId}/links`, {
     method: "PUT",

@@ -53,6 +53,7 @@ class ConversationMessageRead(BaseModel):
     conversation_id: uuid.UUID
     role: str
     content: str | None
+    metadata: dict | None = Field(default=None, validation_alias="metadata_json")
     status: str
     token_input: int | None
     token_output: int | None
@@ -64,3 +65,4 @@ class ConversationMessageRead(BaseModel):
 class ConversationLinksUpdate(BaseModel):
     person_id: uuid.UUID | None = None
     topic_id: uuid.UUID | None = None
+    document_id: uuid.UUID | None = None

@@ -5,12 +5,16 @@ import { useTheme } from "@/lib/theme";
 import { matchRoute, useRouter } from "@/lib/router";
 import { DashboardPage } from "@/pages/dashboard";
 import { AssistantPage } from "@/pages/assistant";
+import { DocumentsPage } from "@/pages/documents";
 import { InteractionsListPage } from "@/pages/interactions-list";
 import { InteractionFormPage } from "@/pages/interaction-form";
 import { PersonDetailPage } from "@/pages/person-detail";
 import { PersonFormPage } from "@/pages/person-form";
 import { PersonsListPage } from "@/pages/persons-list";
 import { ProvidersPage } from "@/pages/providers";
+import { SearchPage } from "@/pages/search";
+import { PracticePage } from "@/pages/practice";
+import { ReviewsPage } from "@/pages/reviews";
 import { TopicDetailPage } from "@/pages/topic-detail";
 import { TopicFormPage } from "@/pages/topic-form";
 import { TopicsListPage } from "@/pages/topics-list";
@@ -20,6 +24,10 @@ const NAV_ITEMS = [
   { path: "/persons", label: "人物" },
   { path: "/interactions", label: "互动记录" },
   { path: "/topics", label: "话题" },
+  { path: "/documents", label: "文件" },
+  { path: "/search", label: "搜索" },
+  { path: "/practice", label: "练习" },
+  { path: "/reviews", label: "复习" },
   { path: "/assistant", label: "AI 助手" },
   { path: "/settings", label: "设置" },
 ];
@@ -57,6 +65,14 @@ export default function App() {
     page = <AssistantPage />;
   } else if (path === "/settings") {
     page = <ProvidersPage />;
+  } else if (path === "/documents") {
+    page = <DocumentsPage />;
+  } else if (path === "/search") {
+    page = <SearchPage />;
+  } else if (path === "/practice") {
+    page = <PracticePage />;
+  } else if (path === "/reviews") {
+    page = <ReviewsPage />;
   } else {
     page = <DashboardPage />;
   }
