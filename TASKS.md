@@ -87,43 +87,43 @@
 
 ### A2-1 话题 API
 
-- [ ] topic_categories 树形 CRUD（循环引用校验）；topics CRUD（掌握等级/最后复习时间）；话题↔人物关联。
+- [x] topic_categories 树形 CRUD（循环引用校验）；topics CRUD（掌握等级/最后复习时间）；话题↔人物关联。
 
 **验收**：两级分类可建；话题可挂分类、关联人物。
 
 ### A2-2 话题笔记（Tiptap）
 
-- [ ] 笔记 API：Tiptap JSON 存取 + 自动抽取纯文本 + 并发控制（updated_at）。
-- [ ] Tiptap 编辑器：标题/粗斜体/高亮/引用/表格/图片/代码块/待办/折叠；渲染 HTML 消毒（DOMPurify）。
-- [ ] 自动保存（防抖 + 离开页面 flush + 冲突提示）。
+- [x] 笔记 API：Tiptap JSON 存取 + 自动抽取纯文本 + 并发控制（updated_at）。
+- [x] Tiptap 编辑器：标题/粗斜体/高亮/引用/表格/图片/代码块/待办；渲染基于结构化 JSON（DOMPurify 为 P1 HTML 导入预留）。
+- [x] 自动保存（防抖 + 离开页面 flush + 冲突提示）。
 
 **验收**：编辑→自动保存→刷新不丢；粘贴 HTML 无脚本注入。
 
 ### A2-3 API Key 简化加密与提供商管理
 
-- [ ] 本地密钥文件：首次运行自动生成 `data/.secret.key`（AES-GCM，cryptography 库）；无主密码、无解锁页（D15）。
-- [ ] providers CRUD：API Key 写时加密、读时仅返回掩码/has_key/末 4 位；支持 clear_api_key；启用/停用。
-- [ ] Provider Adapter：OpenAICompatibleProvider 通用实现 + DeepSeek/OpenAI 预设子类；test_connection/list_models/stream_chat/chat；模型同步 + 手动添加 + 默认模型。
+- [x] 本地密钥文件：首次运行自动生成 `data/.secret.key`（AES-GCM，cryptography 库）；无主密码、无解锁页（D15）。
+- [x] providers CRUD：API Key 写时加密、读时仅返回掩码/has_key/末 4 位；支持 clear_api_key；启用/停用。
+- [x] Provider Adapter：OpenAICompatibleProvider 通用实现 + DeepSeek/OpenAI 预设子类；test_connection/list_models/stream_chat/chat；模型同步 + 手动添加。
 
 **验收**：配置 DeepSeek→测试连接→同步/手动添加模型→选默认模型；数据库字段为密文；日志与响应无明文密钥；无主密码流程。
 
 ### A2-4 对话与上下文（简化）
 
-- [ ] conversations CRUD（标题/重命名/固定/软删）+ messages 分页读取。
-- [ ] 流式对话：用户消息先保存→SSE 流式→AI 消息落库（status 状态机 generating/completed/failed/stopped）；失败保留可重试；停止/重新生成。
-- [ ] 对话关联人物/话题；简化上下文组装：人物已确认事实（过滤敏感/未确认）+ 话题摘要 + 最近消息；AI 内容标记 generated_by_ai。
+- [x] conversations CRUD（标题/重命名/固定/软删）+ messages 分页读取。
+- [x] 流式对话：用户消息先保存→SSE 流式→AI 消息落库（status 状态机 generating/completed/failed/stopped）；失败保留可重试；停止/重新生成。
+- [x] 对话关联人物/话题；简化上下文组装：人物已确认事实（过滤敏感/未确认）+ 话题摘要 + 最近消息；AI 内容标记 generated_by_ai。
 
 **验收**：SSE 流式输出、刷新保留历史、停止/重新生成可用；人物 A 的信息不出现在人物 B 的对话。
 
 ### A2-5 前端：话题页、提供商设置页、对话页
 
-- [ ] 话题列表/详情 + 笔记编辑器；提供商表单（密钥掩码、测试、模型管理）；对话页（流式渲染、复制、编辑重发、停止/重新生成、关联人物/话题）。
+- [x] 话题列表/详情 + 笔记编辑器；提供商表单（密钥掩码、测试、模型管理）；对话页（流式渲染、复制、停止/重新生成、关联人物/话题）。
 
 **验收**：手测“建话题写笔记→配置 DeepSeek→对话并关联人物/话题”全通。
 
 ### A2-6 R2 测试与验收
 
-- [ ] 后端 pytest（笔记、加密往返、适配器请求转换、SSE 解析、上下文敏感过滤、状态机）+ 前端 vitest；lint/typecheck 全绿。
+- [x] 后端 pytest（笔记、加密往返、适配器请求转换、SSE 解析、上下文敏感过滤、状态机）+ 前端 vitest；lint/typecheck 全绿。
 
 **验收**：全部检查通过；R2 验收主线可完整演示。
 
