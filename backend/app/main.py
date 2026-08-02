@@ -22,6 +22,7 @@ from app.api import (
     search,
     tags,
     topics,
+    web_clips,
 )
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
     app.include_router(reviews.router, prefix="/api")
     app.include_router(memory.router, prefix="/api")
     app.include_router(dashboard.router, prefix="/api")
+    app.include_router(web_clips.router, prefix="/api")
     return app
 
 

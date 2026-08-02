@@ -18,6 +18,7 @@ from app.parsers.base import parse_file
 from app.parsers.chunking import chunk_text
 from app.repositories.base import BaseRepository
 from app.schemas.p1 import DocumentLinksUpdate
+from app.services.ai_media_service import AUDIO_EXTS, IMAGE_EXTS, ocr_media, transcribe_media
 
 
 class DocumentRepository(BaseRepository[Document]):
@@ -111,6 +112,16 @@ class DocumentService:
             parsed = parse_file(Path(document.file_path))
             if parsed.error:
                 raise RuntimeError(parsed.error)
+            if not parsed.text.strip():
+                ext = Path(document.file_path).suffix.lower()
+                if ext in IMAGE_EXTS:
+                    text = ocr_media(self.db, Path(document.file_path))
+                elif ext in AUDIO_EXTS:
+                    text = transcribe_media(self.db, Path(document.file_path))
+                else:
+                    text = None
+                if text:
+                    parsed.text = text
             self._replace_chunks(document, parsed)
             document.status = "completed"
             document.error_message = None

@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-ProviderType = Literal["openai_compatible", "deepseek", "openai"]
+ProviderType = Literal["openai_compatible", "deepseek", "openai", "ollama"]
 
 
 class ProviderCreate(BaseModel):

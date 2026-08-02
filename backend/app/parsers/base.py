@@ -102,6 +102,11 @@ def _parse_xlsx(path: Path) -> ParsedDocument:
 
 
 def _parse_html(path: Path) -> ParsedDocument:
+    return ParsedDocument(text=parse_html_text(_read_text(path)))
+
+
+def parse_html_text(html: str) -> str:
+    """从 HTML 字符串提取纯文本。"""
     extractor = _TextExtractor()
-    extractor.feed(_read_text(path))
-    return ParsedDocument(text="\n".join(extractor.parts))
+    extractor.feed(html)
+    return "\n".join(extractor.parts)

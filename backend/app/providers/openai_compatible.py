@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import httpx
 
@@ -104,6 +106,45 @@ class OpenAICompatibleProvider(BaseAIProvider):
             "POST", "/embeddings", {"model": model, "input": texts}
         )
         return [item["embedding"] for item in data.get("data", [])]
+
+    async def ocr_image(self, image_base64: str, model: str) -> str:
+        """调用 vision 模型识别图片中的文字。"""
+        data = await self._request_json(
+            "POST",
+            "/chat/completions",
+            {
+                "model": model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/png;base64,{image_base64}"},
+                            },
+                            {"type": "text", "text": "请识别图片中的全部文字，只输出识别结果。"},
+                        ],
+                    }
+                ],
+            },
+        )
+        return data.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+    async def transcribe_audio(self, file_path: str, model: str) -> str:
+        """调用 /audio/transcriptions 转写音频。"""
+
+        async with await self._client() as client:
+            audio_bytes = await asyncio.to_thread(Path(file_path).read_bytes)
+            response = await client.post(
+                "/audio/transcriptions",
+                files={
+                    "file": (Path(file_path).name, audio_bytes, "application/octet-stream")
+                },
+                data={"model": model, "response_format": "json"},
+            )
+            if response.status_code >= 400:
+                raise ProviderError(f"提供商返回 HTTP {response.status_code}")
+        return response.json().get("text", "")
 
 
 async def asyncio_sleep(seconds: float) -> None:

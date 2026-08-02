@@ -314,6 +314,7 @@ export function ProvidersPage() {
             >
               <option value="deepseek">DeepSeek</option>
               <option value="openai">OpenAI</option>
+              <option value="ollama">Ollama（本地）</option>
               <option value="openai_compatible">OpenAI 兼容接口</option>
             </Select>
           </Field>

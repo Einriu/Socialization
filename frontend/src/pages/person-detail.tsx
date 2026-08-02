@@ -15,12 +15,19 @@ import {
   updateFollowUp,
 } from "@/api/persons";
 import { listTags } from "@/api/tags";
+import { listPersons } from "@/api/persons";
 import {
   getCustomValues,
   listCustomFields,
   setCustomValues,
 } from "@/api/custom-fields";
 import { generateBriefing } from "@/api/p2";
+import {
+  addRelationship,
+  deleteRelationship,
+  listRelationships,
+  type RelationshipItem,
+} from "@/api/p2";
 import type {
   FollowUpTask,
   ImportantDate,
@@ -50,6 +57,51 @@ function ConfidenceBadge({ confidence }: { confidence: string }) {
   );
 }
 
+function RelationshipGraph({
+  centerName,
+  relationships,
+}: {
+  centerName: string;
+  relationships: RelationshipItem[];
+}) {
+  const size = 320;
+  const cx = size / 2;
+  const cy = size / 2;
+  const radius = 110;
+  const count = relationships.length;
+  return (
+    <svg viewBox={`0 0 ${size} ${size}`} className="w-full max-w-xs rounded-lg border bg-card">
+      <circle
+        cx={cx}
+        cy={cy}
+        r={radius}
+        fill="none"
+        stroke="currentColor"
+        className="text-muted"
+        strokeDasharray="4"
+      />
+      {relationships.map((relationship, index) => {
+        const angle = (Math.PI * 2 * index) / count - Math.PI / 2;
+        const x = cx + radius * Math.cos(angle);
+        const y = cy + radius * Math.sin(angle);
+        return (
+          <g key={relationship.id}>
+            <line x1={cx} y1={cy} x2={x} y2={y} stroke="currentColor" className="text-muted" />
+            <circle cx={x} cy={y} r={6} className="fill-primary" />
+            <text x={x} y={y - 10} textAnchor="middle" fontSize="11" fill="currentColor">
+              {relationship.other_person_name}
+            </text>
+          </g>
+        );
+      })}
+      <circle cx={cx} cy={cy} r={20} className="fill-secondary" />
+      <text x={cx} y={cy + 4} textAnchor="middle" fontSize="11" fill="currentColor">
+        {centerName.slice(0, 4)}
+      </text>
+    </svg>
+  );
+}
+
 export function PersonDetailPage() {
   const { path, navigate } = useRouter();
   const personId = matchRoute(path, "/persons/:id")?.params.id ?? "";
@@ -63,6 +115,10 @@ export function PersonDetailPage() {
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [customValues, setCustomValuesState] = useState<Record<string, unknown>>({});
   const [briefing, setBriefing] = useState("");
+  const [relationships, setRelationships] = useState<RelationshipItem[]>([]);
+  const [allPersons, setAllPersons] = useState<Person[]>([]);
+  const [relOtherId, setRelOtherId] = useState("");
+  const [relType, setRelType] = useState("朋友");
   const [error, setError] = useState<string | null>(null);
 
   // 事实表单
@@ -79,7 +135,7 @@ export function PersonDetailPage() {
 
   const load = useCallback(async () => {
     try {
-      const [p, f, d, fu, t, tags, fields, values] = await Promise.all([
+      const [p, f, d, fu, t, tags, fields, values, rels, personsData] = await Promise.all([
         getPerson(personId),
         listFacts(personId),
         listDates(personId),
@@ -88,6 +144,8 @@ export function PersonDetailPage() {
         listTags(),
         listCustomFields(),
         getCustomValues(personId),
+        listRelationships(personId),
+        listPersons({ pageSize: 100 }),
       ]);
       setPerson(p);
       setFacts(f.items);
@@ -97,6 +155,8 @@ export function PersonDetailPage() {
       setAllTags(tags.items);
       setCustomFields(fields);
       setCustomValuesState(values);
+      setRelationships(rels);
+      setAllPersons(personsData.items.filter((item) => item.id !== personId));
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载失败");
@@ -212,6 +272,30 @@ export function PersonDetailPage() {
     } catch (e) {
       setBriefing(e instanceof Error ? e.message : "生成失败");
     }
+  };
+
+  const addRel = async () => {
+    if (!relOtherId || !relType.trim()) {
+      return;
+    }
+    try {
+      await addRelationship(personId, {
+        other_person_id: relOtherId,
+        relation_type: relType.trim(),
+      });
+      setRelOtherId("");
+      void load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "添加关系失败");
+    }
+  };
+
+  const removeRel = async (relationship: RelationshipItem) => {
+    if (!window.confirm(`确认删除与「${relationship.other_person_name}」的关系？`)) {
+      return;
+    }
+    await deleteRelationship(relationship.id);
+    void load();
   };
 
   return (
@@ -424,6 +508,51 @@ export function PersonDetailPage() {
             <p className="text-sm text-muted-foreground">暂无自定义字段（可在设置页创建）</p>
           )}
         </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-medium">人物关系</h2>
+        <div className="flex flex-wrap items-end gap-2">
+          <Select className="w-48" value={relOtherId} onChange={(e) => setRelOtherId(e.target.value)}>
+            <option value="">选择关联人物</option>
+            {allPersons.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </Select>
+          <Select className="w-36" value={relType} onChange={(e) => setRelType(e.target.value)}>
+            {["同事", "同学", "朋友", "家人", "上下级", "伴侣", "共同兴趣", "由某人介绍"].map(
+              (type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ),
+            )}
+          </Select>
+          <Button variant="outline" size="sm" onClick={() => void addRel()}>
+            添加关系
+          </Button>
+        </div>
+        {relationships.length > 0 && (
+          <RelationshipGraph centerName={person.name} relationships={relationships} />
+        )}
+        <ul className="space-y-1">
+          {relationships.map((relationship) => (
+            <li
+              key={relationship.id}
+              className="flex items-center justify-between rounded border bg-card px-3 py-2 text-sm"
+            >
+              <span>
+                {relationship.other_person_name}（{relationship.relation_type}）
+                {relationship.note ? `：${relationship.note}` : ""}
+              </span>
+              <Button variant="ghost" size="sm" onClick={() => void removeRel(relationship)}>
+                删除
+              </Button>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section className="space-y-3">

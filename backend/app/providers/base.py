@@ -67,3 +67,11 @@ class BaseAIProvider(ABC):
     async def create_embeddings(self, model: str, texts: list[str]) -> list[list[float]]:
         """可选：生成文本向量，默认不支持。"""
         raise ProviderError("该提供商不支持嵌入")
+
+    async def ocr_image(self, image_base64: str, model: str) -> str:
+        """可选：图片文字识别（vision 模型）。默认不支持。"""
+        raise ProviderError("该提供商不支持图片识别")
+
+    async def transcribe_audio(self, file_path: str, model: str) -> str:
+        """可选：音频转文字（/audio/transcriptions）。默认不支持。"""
+        raise ProviderError("该提供商不支持音频转写")

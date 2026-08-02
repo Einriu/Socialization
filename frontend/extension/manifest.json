@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Socialization 网页收藏",
+  "version": "0.1.0",
+  "description": "把当前网页正文收藏到本地 Socialization 应用。",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["http://127.0.0.1:8000/*", "http://localhost:8000/*"],
+  "action": {
+    "default_title": "收藏当前页"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

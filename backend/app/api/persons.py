@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, Query, Response
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -27,9 +28,20 @@ from app.schemas.person import (
 )
 from app.schemas.tag import PersonTagsUpdate
 from app.services.person_service import PersonService
+from app.services.relationship_service import (
+    create_relationship,
+    delete_relationship,
+    list_relationships,
+)
 from app.services.social_service import generate_briefing
 
 router = APIRouter()
+
+
+class RelationshipCreate(BaseModel):
+    other_person_id: uuid.UUID
+    relation_type: str = Field(min_length=1, max_length=50)
+    note: str | None = None
 
 
 @router.get("/persons")
@@ -208,6 +220,29 @@ def list_follow_ups(
 async def briefing(person_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
     text = await generate_briefing(db, person_id)
     return success_response({"briefing": text})
+
+
+@router.get("/persons/{person_id}/relationships")
+def relationships(person_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    return success_response(list_relationships(db, person_id))
+
+
+@router.post("/persons/{person_id}/relationships")
+def add_relationship(
+    person_id: uuid.UUID, data: RelationshipCreate, db: Session = Depends(get_db)
+) -> dict:
+    result = create_relationship(
+        db, person_id, data.other_person_id, data.relation_type, data.note
+    )
+    return success_response(result)
+
+
+@router.delete("/relationships/{relationship_id}")
+def remove_relationship(
+    relationship_id: uuid.UUID, db: Session = Depends(get_db)
+) -> dict:
+    delete_relationship(db, relationship_id)
+    return success_response(None, "已删除")
 
 
 @router.post("/persons/{person_id}/follow-ups")

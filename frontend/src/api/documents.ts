@@ -47,3 +47,13 @@ export function setDocumentLinks(
     body: JSON.stringify(input),
   });
 }
+
+export function saveWebClip(
+  url: string,
+  title?: string,
+): Promise<{ id: string; filename: string; status: string }> {
+  return request("/api/web-clips", {
+    method: "POST",
+    body: JSON.stringify({ url, title: title ?? null }),
+  });
+}

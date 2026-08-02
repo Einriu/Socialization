@@ -5,13 +5,14 @@ import {
   listDocuments,
   processDocument,
   setDocumentLinks,
+  saveWebClip,
   uploadDocument,
 } from "@/api/documents";
 import { listPersons } from "@/api/persons";
 import { listTopics } from "@/api/topics";
 import type { DocumentChunkItem, DocumentRecord, Person, Topic } from "@/api/types";
 import { Button } from "@/components/ui/button";
-import { ErrorText, Select } from "@/components/ui/field";
+import { ErrorText, Select, TextInput } from "@/components/ui/field";
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "等待处理",
@@ -30,6 +31,7 @@ export function DocumentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [linkPerson, setLinkPerson] = useState("");
   const [linkTopic, setLinkTopic] = useState("");
+  const [clipUrl, setClipUrl] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -112,6 +114,19 @@ export function DocumentsPage() {
     void load();
   };
 
+  const addClip = async () => {
+    if (!clipUrl.trim()) {
+      return;
+    }
+    try {
+      await saveWebClip(clipUrl.trim());
+      setClipUrl("");
+      void load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "收藏失败");
+    }
+  };
+
   return (
     <main className="mx-auto w-full max-w-5xl space-y-6 px-6 py-10">
       <div className="flex items-center justify-between">
@@ -131,6 +146,16 @@ export function DocumentsPage() {
             }}
           />
         </label>
+      </div>
+      <div className="flex gap-2">
+        <TextInput
+          placeholder="粘贴网页 URL 收藏（自动抓取正文）"
+          value={clipUrl}
+          onChange={(e) => setClipUrl(e.target.value)}
+        />
+        <Button variant="outline" onClick={() => void addClip()}>
+          收藏网页
+        </Button>
       </div>
       <ErrorText message={error} />
 

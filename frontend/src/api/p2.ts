@@ -130,3 +130,29 @@ export function weeklyReport(): Promise<string> {
     (data) => data.report,
   );
 }
+
+export interface RelationshipItem {
+  id: string;
+  other_person_id: string;
+  other_person_name: string;
+  relation_type: string;
+  note: string | null;
+}
+
+export function listRelationships(personId: string): Promise<RelationshipItem[]> {
+  return request<RelationshipItem[]>(`/api/persons/${personId}/relationships`);
+}
+
+export function addRelationship(
+  personId: string,
+  input: { other_person_id: string; relation_type: string; note?: string | null },
+): Promise<RelationshipItem> {
+  return request<RelationshipItem>(`/api/persons/${personId}/relationships`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteRelationship(relationshipId: string): Promise<void> {
+  return request(`/api/relationships/${relationshipId}`, { method: "DELETE" });
+}
