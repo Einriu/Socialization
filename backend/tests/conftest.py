@@ -16,13 +16,16 @@ _TEST_DB_PATH = _TEST_DB_DIR / "test.db"
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB_PATH.as_posix()}"
 os.environ["APP_VERSION"] = "0.0.0-test"
 
+from app.core.database import SessionLocal  # noqa: E402
 from app.core.database import engine as app_engine  # noqa: E402
 from app.main import create_app  # noqa: E402
+from app.models import Base as ModelBase  # noqa: E402
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _clean_test_db() -> None:
-    """测试会话结束后清理临时数据库文件。"""
+def _prepare_db() -> None:
+    """会话开始前建表，结束后释放引擎并清理临时数据库文件。"""
+    ModelBase.metadata.create_all(bind=app_engine)
     yield
     app_engine.dispose()
     for suffix in ("", "-wal", "-shm"):
@@ -32,6 +35,16 @@ def _clean_test_db() -> None:
                 candidate.unlink()
             except OSError:
                 pass
+
+
+@pytest.fixture(autouse=True)
+def _clean_between_tests() -> None:
+    """每个测试前清空全部表，避免用例之间数据串扰。"""
+    with SessionLocal() as db:
+        for table in reversed(ModelBase.metadata.sorted_tables):
+            db.execute(table.delete())
+        db.commit()
+    yield
 
 
 @pytest.fixture()

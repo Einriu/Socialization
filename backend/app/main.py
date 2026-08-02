@@ -5,7 +5,8 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.health import router as health_router
+import app.models  # noqa: F401  # 注册全部 ORM 元数据
+from app.api import health, interactions, persons, tags
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
@@ -25,7 +26,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     register_exception_handlers(app)
-    app.include_router(health_router, prefix="/api")
+    app.include_router(health.router, prefix="/api")
+    app.include_router(persons.router, prefix="/api")
+    app.include_router(tags.router, prefix="/api")
+    app.include_router(interactions.router, prefix="/api")
     return app
 
 
