@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import app.models  # noqa: F401  # 注册全部 ORM 元数据
-from app.api import health, interactions, persons, tags
+from app.api import conversations, health, interactions, persons, providers, tags, topics
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
@@ -30,6 +30,9 @@ def create_app() -> FastAPI:
     app.include_router(persons.router, prefix="/api")
     app.include_router(tags.router, prefix="/api")
     app.include_router(interactions.router, prefix="/api")
+    app.include_router(topics.router, prefix="/api")
+    app.include_router(providers.router, prefix="/api")
+    app.include_router(conversations.router, prefix="/api")
     return app
 
 

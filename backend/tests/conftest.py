@@ -12,9 +12,11 @@ from fastapi.testclient import TestClient
 _TEST_DB_DIR = Path(tempfile.gettempdir()) / "socialization-tests"
 _TEST_DB_DIR.mkdir(parents=True, exist_ok=True)
 _TEST_DB_PATH = _TEST_DB_DIR / "test.db"
+_TEST_DATA_DIR = _TEST_DB_DIR / "data"
 
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB_PATH.as_posix()}"
 os.environ["APP_VERSION"] = "0.0.0-test"
+os.environ["DATA_DIR"] = str(_TEST_DATA_DIR)
 
 from app.core.database import SessionLocal  # noqa: E402
 from app.core.database import engine as app_engine  # noqa: E402

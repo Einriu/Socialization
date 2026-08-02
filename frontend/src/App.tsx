@@ -4,16 +4,24 @@ import { Button } from "@/components/ui/button";
 import { useTheme } from "@/lib/theme";
 import { matchRoute, useRouter } from "@/lib/router";
 import { DashboardPage } from "@/pages/dashboard";
+import { AssistantPage } from "@/pages/assistant";
 import { InteractionsListPage } from "@/pages/interactions-list";
 import { InteractionFormPage } from "@/pages/interaction-form";
 import { PersonDetailPage } from "@/pages/person-detail";
 import { PersonFormPage } from "@/pages/person-form";
 import { PersonsListPage } from "@/pages/persons-list";
+import { ProvidersPage } from "@/pages/providers";
+import { TopicDetailPage } from "@/pages/topic-detail";
+import { TopicFormPage } from "@/pages/topic-form";
+import { TopicsListPage } from "@/pages/topics-list";
 
 const NAV_ITEMS = [
   { path: "/", label: "首页" },
   { path: "/persons", label: "人物" },
   { path: "/interactions", label: "互动记录" },
+  { path: "/topics", label: "话题" },
+  { path: "/assistant", label: "AI 助手" },
+  { path: "/settings", label: "设置" },
 ];
 
 export default function App() {
@@ -37,6 +45,18 @@ export default function App() {
     page = <InteractionFormPage />;
   } else if (matchRoute(path, "/interactions/:id/edit") !== null) {
     page = <InteractionFormPage />;
+  } else if (path === "/topics") {
+    page = <TopicsListPage />;
+  } else if (matchRoute(path, "/topics/new") !== null) {
+    page = <TopicFormPage />;
+  } else if (matchRoute(path, "/topics/:id/edit") !== null) {
+    page = <TopicFormPage />;
+  } else if (matchRoute(path, "/topics/:id") !== null) {
+    page = <TopicDetailPage />;
+  } else if (path === "/assistant") {
+    page = <AssistantPage />;
+  } else if (path === "/settings") {
+    page = <ProvidersPage />;
   } else {
     page = <DashboardPage />;
   }

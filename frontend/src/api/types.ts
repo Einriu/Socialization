@@ -135,3 +135,116 @@ export interface InteractionInput {
   privacy_level?: string;
   participant_ids: string[];
 }
+
+export interface TopicCategoryNode {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  children: TopicCategoryNode[];
+}
+
+export interface Topic {
+  id: string;
+  name: string;
+  category_id: string | null;
+  description: string | null;
+  mastery_level: number;
+  last_reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  persons: PersonLite[];
+}
+
+export interface TopicInput {
+  name: string;
+  category_id?: string | null;
+  description?: string | null;
+  mastery_level?: number;
+}
+
+export interface TopicNote {
+  topic_id: string;
+  content_json: object | null;
+  plain_text: string | null;
+  updated_at: string | null;
+}
+
+export interface Provider {
+  id: string;
+  name: string;
+  provider_type: string;
+  base_url: string | null;
+  enabled: boolean;
+  timeout_seconds: number;
+  max_retries: number;
+  proxy: string | null;
+  default_model_id: string | null;
+  last_tested_at: string | null;
+  created_at: string;
+  updated_at: string;
+  has_api_key: boolean;
+  key_hint: string | null;
+}
+
+export interface ProviderInput {
+  name: string;
+  provider_type?: string;
+  base_url?: string | null;
+  api_key?: string | null;
+  enabled?: boolean;
+  timeout_seconds?: number;
+  max_retries?: number;
+  proxy?: string | null;
+  default_model_id?: string | null;
+}
+
+export interface AIModel {
+  id: string;
+  provider_id: string;
+  model_id: string;
+  display_name: string | null;
+  model_type: string;
+  context_length: number | null;
+  supports_streaming: boolean;
+  supports_tools: boolean;
+  supports_json: boolean;
+  supports_vision: boolean;
+  supports_reasoning: boolean;
+  input_price_note: string | null;
+  output_price_note: string | null;
+  enabled: boolean;
+  source: string;
+  created_at: string;
+}
+
+export interface ConversationLink {
+  id: string;
+  person_id: string | null;
+  topic_id: string | null;
+}
+
+export interface Conversation {
+  id: string;
+  title: string;
+  mode: string;
+  provider_id: string | null;
+  model_id: string | null;
+  summary: string | null;
+  pinned: boolean;
+  created_at: string;
+  updated_at: string;
+  links: ConversationLink[];
+}
+
+export interface ConversationMessage {
+  id: string;
+  conversation_id: string;
+  role: string;
+  content: string | null;
+  status: string;
+  token_input: number | null;
+  token_output: number | null;
+  latency_ms: number | null;
+  generated_by_ai: boolean;
+  created_at: string;
+}

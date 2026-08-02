@@ -22,6 +22,7 @@ ERROR_MESSAGES: dict[str, str] = {
     "CONFLICT": "资源状态冲突",
     "VALIDATION_ERROR": "请求参数校验失败",
     "DATABASE_UNAVAILABLE": "数据库不可用",
+    "AI_PROVIDER_ERROR": "AI 提供商调用失败",
     "INTERNAL_ERROR": "服务器内部错误",
 }
 

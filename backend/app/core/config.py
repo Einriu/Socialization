@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     app_name: str = "Socialization"
     app_version: str = "0.1.0"
     database_url: str = "sqlite:///data/socialization.db"
+    data_dir: str = "data"
     backend_host: str = "127.0.0.1"
     backend_port: int = 8000
     frontend_port: int = 3000
@@ -43,6 +44,14 @@ class Settings(BaseSettings):
                 raw = str(REPO_ROOT / raw)
             return f"{prefix}{raw.replace(os.sep, '/')}"
         return value
+
+    @field_validator("data_dir", mode="after")
+    @classmethod
+    def _resolve_data_dir(cls, value: str) -> str:
+        path = Path(value)
+        if not path.is_absolute():
+            path = REPO_ROOT / path
+        return str(path)
 
 
 @lru_cache
