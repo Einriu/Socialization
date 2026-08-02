@@ -39,45 +39,45 @@
 
 ### A1-1 数据库：一次性建全部 P0 表 + 种子
 
-- [ ] Alembic 迁移创建全部 P0 表：persons、tags、person_tags、person_facts、important_dates、follow_up_tasks、interactions、interaction_participants、interaction_topics、topic_categories、topics、topic_notes、topic_person_links、ai_providers、ai_models、conversations、conversation_messages、conversation_links、app_settings、backup_records、audit_logs、prompt_templates。
-- [ ] 类型约定：UUID（存 32 位十六进制）、UTC 时间、JSON 字段；常用索引；`deleted_at` 软删除列。
-- [ ] 种子数据：20 个预设话题分类、默认设置、内置 prompt 模板。
+- [x] Alembic 迁移创建全部 P0 表：persons、tags、person_tags、person_facts、important_dates、follow_up_tasks、interactions、interaction_participants、interaction_topics、topic_categories、topics、topic_notes、topic_person_links、ai_providers、ai_models、conversations、conversation_messages、conversation_links、app_settings、backup_records、audit_logs、prompt_templates。
+- [x] 类型约定：UUID（存 32 位十六进制）、UTC 时间、JSON 字段；常用索引；`deleted_at` 软删除列。
+- [x] 种子数据：20 个预设话题分类、默认设置、内置 prompt 模板。
 
 **验收**：`alembic upgrade head` / `downgrade -1` / `upgrade head` 均可执行；种子数据存在；无业务表遗漏。
 
 ### A1-2 数据访问基座
 
-- [ ] Repository 基类：分页 `{items,total,page,page_size}`、软删除过滤、`updated_at` 维护、audit_logs 基础写入。
-- [ ] 统一异常映射（NotFound/Conflict/ValidationError）。
+- [x] Repository 基类：分页 `{items,total,page,page_size}`、软删除过滤、`updated_at` 维护、audit_logs 基础写入。
+- [x] 统一异常映射（NotFound/Conflict/ValidationError）。
 
 **验收**：任一 Repository 操作自动写审计；分页与软删行为有测试覆盖。
 
 ### A1-3 人物与标签 API
 
-- [ ] persons CRUD（列表分页/关键词筛选、软删+彻底删除、审计）。
-- [ ] tags CRUD（颜色/分组）+ 人物标签批量设置。
-- [ ] person_facts CRUD（source_type/confidence/is_sensitive）+ important_dates + follow_up_tasks 基础 CRUD。
+- [x] persons CRUD（列表分页/关键词筛选、软删+彻底删除、审计）。
+- [x] tags CRUD（颜色/分组）+ 人物标签批量设置。
+- [x] person_facts CRUD（source_type/confidence/is_sensitive）+ important_dates + follow_up_tasks 基础 CRUD。
 
 **验收**：接口测试覆盖 CRUD、分页、软删、事实确认标记；前端可完成“新建人物→加标签→加事实→加重要日期”。
 
 ### A1-4 互动与时间线 API
 
-- [ ] interactions CRUD：多人物、多话题关联；“后续事项”自动落 follow_up_tasks；列表按人物/话题/时间筛选。
-- [ ] `GET /api/persons/{id}/timeline`：合并互动+事实+重要日期，时间倒序，分页。
+- [x] interactions CRUD：多人物、多话题关联；“后续事项”自动落 follow_up_tasks；列表按人物/话题/时间筛选。
+- [x] `GET /api/persons/{id}/timeline`：合并互动+事实+重要日期，时间倒序，分页。
 
 **验收**：一次互动关联 2 人+2 话题；后续事项出现在跟进列表；时间线排序正确。
 
 ### A1-5 前端：人物与互动页面
 
-- [ ] 人物列表/详情/表单（标签、事实带来源与确认徽标、重要日期、跟进、时间线）。
-- [ ] 互动记录列表/表单（多人物/话题选择、后续事项）；删除二次确认。
+- [x] 人物列表/详情/表单（标签、事实带来源与确认徽标、重要日期、跟进、时间线）。
+- [x] 互动记录列表/表单（多人物/话题选择、后续事项）；删除二次确认。
 
 **验收**：手测“建人→加标签→加事实→记互动→看时间线”全通。
 
 ### A1-6 R1 测试与验收
 
-- [ ] 后端 pytest（人物/标签/事实/互动/时间线/分页/审计）+ 前端 vitest 关键组件；lint/typecheck 全绿。
-- [ ] 运行 `.\scripts\dev.ps1` 完成 R1 端到端手测。
+- [x] 后端 pytest（人物/标签/事实/互动/时间线/分页/审计）+ 前端 vitest 关键组件；lint/typecheck 全绿。
+- [x] 运行 `.\scripts\dev.ps1` 完成 R1 端到端手测。
 
 **验收**：全部检查通过；R1 验收主线可完整演示。
 
