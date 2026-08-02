@@ -23,6 +23,25 @@ class ConfirmExtractions(BaseModel):
 class PracticeSessionCreate(BaseModel):
     scenario_id: uuid.UUID
     title: str | None = None
+    channel: Literal["online", "offline"] = "offline"
+    tags: list[str] = Field(default_factory=list)
+    custom_prompt: str | None = None
+    participants: list[dict] = Field(default_factory=list)
+
+
+class PracticeScenarioCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    channel: Literal["online", "offline"] = "offline"
+    tags: list[str] = Field(default_factory=list)
+    custom_prompt: str | None = None
+    participants: list[dict] = Field(default_factory=list)
+
+
+class BackgroundGenerate(BaseModel):
+    channel: Literal["online", "offline"] = "offline"
+    tags: list[str] = Field(default_factory=list)
+    custom_prompt: str | None = None
+    person_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class PracticeSend(BaseModel):

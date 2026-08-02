@@ -45,16 +45,70 @@ export interface Scenario {
   scenario_type: string;
   title: string;
   description: string | null;
+  channel: string;
+  tags: string[];
+  custom_prompt: string | null;
+  participants: { name: string; role?: string }[];
 }
 
 export function listScenarios(): Promise<Scenario[]> {
   return request<Scenario[]>("/api/practice/scenarios");
 }
 
-export function createPracticeSession(scenarioId: string): Promise<{ id: string; title: string }> {
+export interface TagLibrary {
+  场合: string[];
+  谈话背景: string[];
+  对象类型: string[];
+}
+
+export function listTagLibrary(): Promise<TagLibrary> {
+  return request<TagLibrary>("/api/practice/tag-library");
+}
+
+export function generateBackground(input: {
+  channel: string;
+  tags?: string[];
+  custom_prompt?: string | null;
+  person_ids?: string[];
+}): Promise<string> {
+  return request<{ background: string }>("/api/practice/generate-background", {
+    method: "POST",
+    body: JSON.stringify(input),
+  }).then((data) => data.background);
+}
+
+export function createCustomScenario(input: {
+  title: string;
+  channel: string;
+  tags?: string[];
+  custom_prompt?: string | null;
+  participants?: { name: string; role?: string }[];
+}): Promise<{ id: string; title: string; channel: string; tags: string[] }> {
+  return request("/api/practice/scenarios", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function createPracticeSession(
+  scenarioId: string,
+  options?: {
+    channel?: string;
+    tags?: string[];
+    custom_prompt?: string | null;
+    participants?: { name: string; role?: string }[];
+  },
+): Promise<{
+  id: string;
+  title: string;
+  channel: string;
+  tags: string[];
+  custom_prompt: string | null;
+  participants: { name: string; role?: string }[];
+}> {
   return request("/api/practice/sessions", {
     method: "POST",
-    body: JSON.stringify({ scenario_id: scenarioId }),
+    body: JSON.stringify({ scenario_id: scenarioId, ...options }),
   });
 }
 
@@ -62,6 +116,10 @@ export interface PracticeSessionInfo {
   id: string;
   title: string;
   status: string;
+  channel: string;
+  tags: string[];
+  custom_prompt: string | null;
+  participants: { name: string; role?: string }[];
   created_at: string;
 }
 

@@ -67,6 +67,10 @@ class PracticeScenario(UUIDPrimaryKeyMixin, Base):
     title: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     role_params: Mapped[dict | None] = mapped_column(JSON)
+    channel: Mapped[str] = mapped_column(String(10), nullable=False, default="offline")
+    tags: Mapped[list | None] = mapped_column(JSON)
+    custom_prompt: Mapped[str | None] = mapped_column(Text)
+    participants: Mapped[list | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(timezone=True), nullable=False, default=utcnow
     )
@@ -82,6 +86,10 @@ class PracticeSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    channel: Mapped[str] = mapped_column(String(10), nullable=False, default="offline")
+    tags: Mapped[list | None] = mapped_column(JSON)
+    custom_prompt: Mapped[str | None] = mapped_column(Text)
+    participants: Mapped[list | None] = mapped_column(JSON)
     scenario: Mapped[PracticeScenario] = relationship()
 
 

@@ -92,7 +92,10 @@ def test_extract_confirm_and_review(client: TestClient, monkeypatch: object) -> 
 def test_practice_stream_and_evaluate(
     client: TestClient, monkeypatch: object
 ) -> None:
-    fake = FakeChat(text='{"scores":{"倾听能力":8,"共情表达":7},"summary":"整体不错"}')
+    fake = FakeChat(
+        text='{"scores":{"倾听能力":8,"共情表达":7,"多角色参与":9},"summary":"整体不错"}',
+        stream_chunks=["【张三】今天天气不错。\n", "【李四】是啊，", "适合出去走走。"],
+    )
     _patch_chat(monkeypatch, fake)
     with SessionLocal() as db:
         scenario = PracticeScenario(
@@ -117,11 +120,15 @@ def test_practice_stream_and_evaluate(
         f"/api/practice/sessions/{session['id']}/messages"
     ).json()["data"]
     assert len(messages) == 2
+    assert "【张三】" in messages[1]["content"]
+    assert "【李四】" in messages[1]["content"]
+    assert messages[1]["content"] == "【张三】今天天气不错。\n【李四】是啊，适合出去走走。"
 
     evaluation = client.post(
         f"/api/practice/sessions/{session['id']}/evaluate"
     ).json()["data"]
     assert evaluation["scores"]["倾听能力"] == 8
+    assert evaluation["scores"]["多角色参与"] == 9
     sessions = client.get("/api/practice/sessions").json()["data"]
     assert sessions[0]["status"] == "completed"
 

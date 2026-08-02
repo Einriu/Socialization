@@ -192,7 +192,11 @@ export function TopicDetailPage() {
           <h2 className="text-lg font-medium">笔记</h2>
           <span className="text-xs text-muted-foreground">{saveStatus}</span>
         </div>
-        <NoteEditor initialJson={note?.content_json ?? null} onSave={(json, text) => void handleSave(json, text)} />
+        <NoteEditor
+          initialJson={note?.content_json ?? null}
+          onSave={(json, text) => void handleSave(json, text)}
+          saveStatus={saveStatus}
+        />
       </section>
       <ErrorText message={error} />
     </main>
