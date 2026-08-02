@@ -22,6 +22,11 @@ coverage/
 # 本地数据（数据库、上传文件、备份、导出）
 data/
 
+# 桌面打包产物
+desktop/build/
+desktop/dist/
+desktop/*.spec
+
 # 编辑器与系统
 .vscode/
 .idea/

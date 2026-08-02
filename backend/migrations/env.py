@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from logging.config import fileConfig
 from pathlib import Path
@@ -13,13 +14,20 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from app.core.config import get_settings  # noqa: E402
+try:
+    from app.core.config import get_settings  # noqa: E402
+
+    _DATABASE_URL = get_settings().database_url
+except Exception:  # noqa: BLE001 - 冻结环境下 app 可能不可从磁盘导入
+    _DATABASE_URL = os.environ.get(
+        "DATABASE_URL", "sqlite:///data/socialization.db"
+    )
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
+config.set_main_option("sqlalchemy.url", _DATABASE_URL.replace("%", "%%"))
 
 # M1 里程碑将把 SQLAlchemy 模型元数据接入此处
 target_metadata = None

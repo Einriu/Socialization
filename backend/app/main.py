@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 import app.models  # noqa: F401  # 注册全部 ORM 元数据
 from app.api import (
@@ -59,7 +64,28 @@ def create_app() -> FastAPI:
     app.include_router(memory.router, prefix="/api")
     app.include_router(dashboard.router, prefix="/api")
     app.include_router(web_clips.router, prefix="/api")
+    _mount_frontend(app)
     return app
+
+
+def _mount_frontend(app: FastAPI) -> None:
+    """生产模式：挂载 frontend/dist（含桌面打包场景）。"""
+    if getattr(sys, "frozen", False):
+        base = Path(sys._MEIPASS) / "frontend_dist"  # type: ignore[attr-defined]
+    else:
+        base = Path(__file__).resolve().parents[1] / "frontend" / "dist"
+    if not (base / "index.html").exists():
+        return
+    assets = base / "assets"
+    if assets.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets)), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa(full_path: str) -> FileResponse:
+        target = base / full_path
+        if full_path and target.is_file():
+            return FileResponse(target)
+        return FileResponse(base / "index.html")
 
 
 app = create_app()
