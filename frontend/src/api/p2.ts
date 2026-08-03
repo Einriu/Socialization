@@ -48,7 +48,7 @@ export interface Scenario {
   channel: string;
   tags: string[];
   custom_prompt: string | null;
-  participants: { name: string; role?: string }[];
+  participants: { name: string; role?: string; person_id?: string }[];
 }
 
 export function listScenarios(): Promise<Scenario[]> {
@@ -91,12 +91,12 @@ export function createCustomScenario(input: {
 }
 
 export function createPracticeSession(
-  scenarioId: string,
+  scenarioId: string | null,
   options?: {
     channel?: string;
     tags?: string[];
     custom_prompt?: string | null;
-    participants?: { name: string; role?: string }[];
+    participants?: { name: string; role?: string; person_id?: string }[];
   },
 ): Promise<{
   id: string;
@@ -119,7 +119,7 @@ export interface PracticeSessionInfo {
   channel: string;
   tags: string[];
   custom_prompt: string | null;
-  participants: { name: string; role?: string }[];
+  participants: { name: string; role?: string; person_id?: string }[];
   created_at: string;
 }
 

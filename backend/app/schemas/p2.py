@@ -21,7 +21,7 @@ class ConfirmExtractions(BaseModel):
 
 
 class PracticeSessionCreate(BaseModel):
-    scenario_id: uuid.UUID
+    scenario_id: uuid.UUID | None = None
     title: str | None = None
     channel: Literal["online", "offline"] = "offline"
     tags: list[str] = Field(default_factory=list)

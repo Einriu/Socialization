@@ -22,11 +22,14 @@ class FakeChat:
     ) -> None:
         self.text = text
         self.stream_chunks = stream_chunks or ["你好", "，", "继续"]
+        self.requests: list[object] = []
 
     async def chat(self, request: object) -> ChatResponse:
+        self.requests.append(request)
         return ChatResponse(content=self.text)
 
     async def stream_chat(self, request: object) -> object:
+        self.requests.append(request)
         for chunk in self.stream_chunks:
             yield chunk
 
@@ -131,6 +134,71 @@ def test_practice_stream_and_evaluate(
     assert evaluation["scores"]["多角色参与"] == 9
     sessions = client.get("/api/practice/sessions").json()["data"]
     assert sessions[0]["status"] == "completed"
+
+
+def test_practice_custom_session_injects_person_info(
+    client: TestClient, monkeypatch: object
+) -> None:
+    """自定义场景（无预设）直建会话，并把人物库资料注入对话系统提示。"""
+    fake = FakeChat(stream_chunks=["【小美】最近怎么样？"])
+    _patch_chat(monkeypatch, fake)
+    person = client.post(
+        "/api/persons", json={"name": "小美", "relationship_type": "朋友"}
+    ).json()["data"]
+    client.post(
+        f"/api/persons/{person['id']}/facts",
+        json={"fact_type": "近况", "content": "最近换了新工作"},
+    )
+
+    session = client.post(
+        "/api/practice/sessions",
+        json={
+            "channel": "offline",
+            "tags": ["朋友聚会", "初次见面"],
+            "custom_prompt": "多年未见的老朋友聚会，气氛轻松。",
+            "participants": [
+                {"name": "小美", "role": "朋友", "person_id": person["id"]},
+            ],
+        },
+    )
+    assert session.status_code == 200
+    data = session.json()["data"]
+    assert data["title"] == "线下社交 · 朋友聚会、初次见面"
+    assert data["participants"][0]["person_id"] == person["id"]
+
+    resp = client.post(
+        f"/api/practice/sessions/{data['id']}/messages",
+        json={"content": "嗨，好久不见"},
+    )
+    body = "".join(resp.iter_text())
+    assert '"type": "done"' in body
+
+    system = next(
+        m.messages[0].content
+        for m in fake.requests
+        if hasattr(m, "messages") and len(m.messages) > 0
+    )
+    assert "多年未见的老朋友聚会" in system
+    assert "小美" in system
+    assert "最近换了新工作" in system
+    assert "朋友" in system
+
+
+def test_multiple_custom_scenarios_allowed(
+    client: TestClient,
+) -> None:
+    """自定义场景可重复创建（scenario_type 唯一约束用随机后缀规避）。"""
+    first = client.post(
+        "/api/practice/scenarios",
+        json={"title": "自定义一", "tags": ["聚会"]},
+    )
+    second = client.post(
+        "/api/practice/scenarios",
+        json={"title": "自定义二", "tags": ["面试"]},
+    )
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["data"]["id"] != second.json()["data"]["id"]
 
 
 def test_review_answer_schedules_next(client: TestClient) -> None:

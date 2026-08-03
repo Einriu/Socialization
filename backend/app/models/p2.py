@@ -81,8 +81,8 @@ class PracticeSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     __tablename__ = "practice_sessions"
 
-    scenario_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("practice_scenarios.id"), nullable=False
+    scenario_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("practice_scenarios.id"), nullable=True
     )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
@@ -90,7 +90,7 @@ class PracticeSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     tags: Mapped[list | None] = mapped_column(JSON)
     custom_prompt: Mapped[str | None] = mapped_column(Text)
     participants: Mapped[list | None] = mapped_column(JSON)
-    scenario: Mapped[PracticeScenario] = relationship()
+    scenario: Mapped[PracticeScenario | None] = relationship()
 
 
 class PracticeMessage(UUIDPrimaryKeyMixin, Base):

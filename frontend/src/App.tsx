@@ -14,6 +14,7 @@ import { PersonsListPage } from "@/pages/persons-list";
 import { ProvidersPage } from "@/pages/providers";
 import { SearchPage } from "@/pages/search";
 import { PracticePage } from "@/pages/practice";
+import { PracticeSessionPage } from "@/pages/practice-session";
 import { ReviewsPage } from "@/pages/reviews";
 import { TopicDetailPage } from "@/pages/topic-detail";
 import { TopicFormPage } from "@/pages/topic-form";
@@ -69,6 +70,11 @@ export default function App() {
     page = <DocumentsPage />;
   } else if (path === "/search") {
     page = <SearchPage />;
+  } else if (
+    path === "/practice/session" ||
+    matchRoute(path, "/practice/session/:id") !== null
+  ) {
+    page = <PracticeSessionPage />;
   } else if (path === "/practice") {
     page = <PracticePage />;
   } else if (path === "/reviews") {

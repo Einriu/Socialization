@@ -41,6 +41,34 @@ TAG_LIBRARY = {
 CHANNEL_LABELS = {"online": "线上（微信等）", "offline": "线下社交"}
 
 
+def _person_summary(db: Session, person_id: uuid.UUID) -> str | None:
+    """汇总人物库中已确认且不敏感的信息，供背景生成与对话注入使用。"""
+    person = db.get(Person, person_id)
+    if person is None:
+        return None
+    facts = db.execute(
+        select(PersonFact)
+        .where(
+            PersonFact.person_id == person_id,
+            PersonFact.confidence.in_(["confirmed", "user_observation"]),
+            PersonFact.is_sensitive.is_(False),
+        )
+        .limit(10)
+    ).scalars()
+    fact_text = "；".join(f"{f.fact_type}：{f.content}" for f in facts)
+    details = [
+        f"关系：{person.relationship_type or '未知'}",
+        f"熟悉度 {person.familiarity_level or 0}/6",
+    ]
+    if person.organization:
+        details.append(f"所在组织：{person.organization}")
+    if person.occupation:
+        details.append(f"职业：{person.occupation}")
+    if person.location:
+        details.append(f"所在地：{person.location}")
+    return f"- {person.name}（{'，'.join(details)}）：{fact_text or '（暂无已确认事实）'}"
+
+
 def list_scenarios(db: Session) -> list[PracticeScenario]:
     return list(
         db.execute(
@@ -50,17 +78,34 @@ def list_scenarios(db: Session) -> list[PracticeScenario]:
 
 
 def create_session(db: Session, data: PracticeSessionCreate) -> PracticeSession:
-    scenario = db.get(PracticeScenario, data.scenario_id)
-    if scenario is None:
+    scenario = (
+        db.get(PracticeScenario, data.scenario_id)
+        if data.scenario_id is not None
+        else None
+    )
+    if data.scenario_id is not None and scenario is None:
         raise AppError("NOT_FOUND", "场景不存在", status_code=404)
+    title = data.title
+    if not title:
+        if scenario is not None:
+            title = scenario.title
+        else:
+            label = CHANNEL_LABELS.get(data.channel, data.channel)
+            title = (
+                f"{label} · {'、'.join(data.tags[:5])}"
+                if data.tags
+                else f"{label} · 自定义练习"
+            )
     session = PracticeSession(
-        scenario_id=scenario.id,
-        title=data.title or scenario.title,
+        scenario_id=scenario.id if scenario is not None else None,
+        title=title,
         status="active",
         channel=data.channel,
         tags=data.tags,
-        custom_prompt=data.custom_prompt or scenario.custom_prompt,
-        participants=data.participants or scenario.participants,
+        custom_prompt=data.custom_prompt
+        or (scenario.custom_prompt if scenario is not None else None),
+        participants=data.participants
+        or (scenario.participants if scenario is not None else None),
     )
     db.add(session)
     db.flush()
@@ -69,7 +114,8 @@ def create_session(db: Session, data: PracticeSessionCreate) -> PracticeSession:
 
 def create_custom_scenario(db: Session, data: PracticeScenarioCreate) -> PracticeScenario:
     scenario = PracticeScenario(
-        scenario_type="custom",
+        # scenario_type 有唯一约束，自定义场景用随机后缀避免冲突
+        scenario_type=f"custom-{uuid.uuid4().hex[:10]}",
         title=data.title,
         channel=data.channel,
         tags=data.tags,
@@ -89,25 +135,11 @@ async def generate_background(db: Session, data: BackgroundGenerate) -> str:
         f"场景标签：{'、'.join(data.tags) if data.tags else '（未指定）'}",
     ]
     if data.person_ids:
-        person_lines = []
-        for person_id in data.person_ids:
-            person = db.get(Person, person_id)
-            if person is None:
-                continue
-            facts = db.execute(
-                select(PersonFact)
-                .where(
-                    PersonFact.person_id == person_id,
-                    PersonFact.confidence.in_(["confirmed", "user_observation"]),
-                    PersonFact.is_sensitive.is_(False),
-                )
-                .limit(10)
-            ).scalars()
-            person_lines.append(
-                f"- {person.name}（关系：{person.relationship_type or '未知'}，"
-                f"熟悉度 {person.familiarity_level}/6）："
-                + "；".join(f"{f.fact_type}：{f.content}" for f in facts)
-            )
+        person_lines = [
+            summary
+            for person_id in data.person_ids
+            if (summary := _person_summary(db, person_id)) is not None
+        ]
         lines.append("参与对象（来自我的人物库）：")
         lines.extend(person_lines)
     if data.custom_prompt:
@@ -144,7 +176,11 @@ async def stream_practice(
     session = db.get(PracticeSession, session_id)
     if session is None:
         raise AppError("NOT_FOUND", status_code=404)
-    scenario = db.get(PracticeScenario, session.scenario_id)
+    scenario = (
+        db.get(PracticeScenario, session.scenario_id)
+        if session.scenario_id is not None
+        else None
+    )
     user_message = PracticeMessage(session_id=session_id, role="user", content=content)
     db.add(user_message)
     db.flush()
@@ -158,15 +194,45 @@ async def stream_practice(
     system = (
         f"你正在组织一场多人社交练习。"
         f"渠道：{CHANNEL_LABELS.get(session.channel, session.channel)}。"
-        f"场景：{session.custom_prompt or scenario.description or scenario.title}。"
     )
-    participants = session.participants or scenario.participants or [{"name": "对方"}]
-    role_names = [
-        item.get("name", "对方") if isinstance(item, dict) else str(item)
-        for item in participants
-    ]
+    scenario_text = session.custom_prompt
+    if not scenario_text and scenario is not None:
+        scenario_text = scenario.description or scenario.title
+    if scenario_text:
+        system += f"场景：{scenario_text}。"
+    participants = session.participants
+    if not participants and scenario is not None:
+        participants = scenario.participants
+    if not participants:
+        participants = [{"name": "对方"}]
+    role_names: list[str] = []
+    person_lines: list[str] = []
+    for item in participants:
+        if not isinstance(item, dict):
+            role_names.append(str(item))
+            continue
+        name = item.get("name") or "对方"
+        role = item.get("role")
+        role_names.append(f"{name}（{role}）" if role else name)
+        raw_person_id = item.get("person_id")
+        if raw_person_id:
+            try:
+                person_id = uuid.UUID(str(raw_person_id))
+            except (ValueError, TypeError):
+                continue
+            summary = _person_summary(db, person_id)
+            if summary is not None:
+                person_lines.append(summary)
     system += (
         "\n在场角色：" + "、".join(role_names) + "。\n"
+    )
+    if person_lines:
+        system += (
+            "在场对象已知信息（来自我的人物库，不要直接复述，融入言行与态度即可）：\n"
+            + "\n".join(person_lines)
+            + "\n"
+        )
+    system += (
         "对话规则：\n"
         "1. 一次回复可以包含多个角色的连续发言，每个发言单独成段并以【角色名】开头，"
         "例如：\n【张三】今天天气不错啊。\n【李四】是啊，适合出去走走。\n"
