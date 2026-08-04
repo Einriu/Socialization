@@ -6,7 +6,7 @@ import json
 import uuid
 from collections.abc import AsyncIterator
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError
@@ -170,6 +170,18 @@ def list_messages(db: Session, session_id: uuid.UUID) -> list[PracticeMessage]:
     )
 
 
+def delete_session(db: Session, session_id: uuid.UUID) -> None:
+    """删除练习会话及其消息与评分记录。"""
+    session = db.get(PracticeSession, session_id)
+    if session is None:
+        raise AppError("NOT_FOUND", "会话不存在", status_code=404)
+    db.execute(delete(PracticeMessage).where(PracticeMessage.session_id == session_id))
+    db.execute(
+        delete(PracticeEvaluation).where(PracticeEvaluation.session_id == session_id)
+    )
+    db.delete(session)
+
+
 async def stream_practice(
     db: Session, session_id: uuid.UUID, content: str
 ) -> AsyncIterator[str]:
@@ -191,29 +203,25 @@ async def stream_practice(
         yield f"data: {payload}\n\n"
         return
     history = list_messages(db, session_id)
-    system = (
-        f"你正在组织一场多人社交练习。"
-        f"渠道：{CHANNEL_LABELS.get(session.channel, session.channel)}。"
-    )
+    channel_text = CHANNEL_LABELS.get(session.channel, session.channel)
     scenario_text = session.custom_prompt
     if not scenario_text and scenario is not None:
         scenario_text = scenario.description or scenario.title
-    if scenario_text:
-        system += f"场景：{scenario_text}。"
+
     participants = session.participants
     if not participants and scenario is not None:
         participants = scenario.participants
     if not participants:
         participants = [{"name": "对方"}]
-    role_names: list[str] = []
+    role_items: list[dict] = []
     person_lines: list[str] = []
     for item in participants:
         if not isinstance(item, dict):
-            role_names.append(str(item))
+            role_items.append({"name": str(item), "role": None})
             continue
         name = item.get("name") or "对方"
         role = item.get("role")
-        role_names.append(f"{name}（{role}）" if role else name)
+        role_items.append({"name": name, "role": role})
         raw_person_id = item.get("person_id")
         if raw_person_id:
             try:
@@ -223,23 +231,64 @@ async def stream_practice(
             summary = _person_summary(db, person_id)
             if summary is not None:
                 person_lines.append(summary)
-    system += (
-        "\n在场角色：" + "、".join(role_names) + "。\n"
-    )
+
+    system = f"交流渠道：{channel_text}。"
+    if scenario_text:
+        system += f"场景：{scenario_text}。"
+    system += "\n"
+
     if person_lines:
+        label = "对方" if len(role_items) <= 1 else "在场对象"
         system += (
-            "在场对象已知信息（来自我的人物库，不要直接复述，融入言行与态度即可）：\n"
+            f"{label}已知信息（来自我的人物库，不要直接复述，融入言行与态度即可）：\n"
             + "\n".join(person_lines)
             + "\n"
         )
-    system += (
-        "对话规则：\n"
-        "1. 一次回复可以包含多个角色的连续发言，每个发言单独成段并以【角色名】开头，"
-        "例如：\n【张三】今天天气不错啊。\n【李四】是啊，适合出去走走。\n"
-        "2. 角色之间可以互相交谈、回应彼此、自然接话，形成真实的多人群聊；"
-        "用户（我）不是唯一发言者，可以随时插话或暂时旁观。\n"
-        "3. 每个发言 1-3 句，整条回复 1-6 段，避免冷场；不要替用户（我）说话。"
-    )
+
+    if len(role_items) <= 1:
+        partner = role_items[0] if role_items else {"name": "对方", "role": None}
+        role_label = (
+            f"{partner['name']}（{partner['role']}）"
+            if partner["role"]
+            else partner["name"]
+        )
+        system += (
+            f"你正在扮演【{role_label}】，与用户（我）进行一对一的对话。\n"
+            "你有自己的生活、工作、兴趣和情绪，有自己的想法和立场，"
+            "不是只会迎合我的工具。\n"
+            "对话风格与规则：\n"
+            "1. 像现实中的真人一样说话：口语化、自然、简短、有情绪起伏；"
+            "不要书面语、客服腔、教科书腔，不要使用“我理解你的感受”"
+            "“这很正常”“听起来很不错”之类的客套话。\n"
+            "2. 要有主导感：不要总是犹豫或试探，该表态就表态，该邀请就邀请；"
+            "可以主动提出与自己生活、职业/行业相关的话题，"
+            "也可以直接推进话题、给出自己的判断。\n"
+            "3. 每次只回复一段话（1-3 句），以第一人称说话，"
+            "不要使用【角色名】前缀，也不要分段。\n"
+            "4. 只回应用户（我）刚才说的话；不要自言自语、不要自问自答，"
+            "不要连续输出多段独白，不要替用户（我）说话。\n"
+            "5. 始终围绕当前场景，不要引入或扮演场景之外的第三个说话角色。"
+        )
+    else:
+        role_names = [
+            f"{item['name']}（{item['role']}）" if item["role"] else item["name"]
+            for item in role_items
+        ]
+        system += "在场角色：" + "、".join(role_names) + "。\n"
+        system += (
+            "你正在组织一场多人社交练习，同时扮演以上所有在场角色。\n"
+            "每个角色都有自己的性格、立场和话题，不要互相附和，也不要轮流客套。\n"
+            "对话风格与规则：\n"
+            "1. 说话要像现实中的真人：口语化、简短、有情绪起伏；"
+            "避免书面语、客服腔和“我理解你的感受”之类的客套话。\n"
+            "2. 角色要有主导感：可以主动提出与自己的生活、职业/行业相关的话题，"
+            "直接推进话题、邀请或表态，不必事事围绕用户（我）。\n"
+            "3. 角色之间可以互相交谈、回应彼此、自然接话，形成真实的多人群聊；"
+            "一次回复可以包含多个角色的连续发言，每个发言单独成段并以【角色名】开头，"
+            "例如：\n【张三】今天天气不错啊。\n【李四】是啊，适合出去走走。\n"
+            "4. 每个发言 1-3 句，整条回复 1-6 段，避免冷场；"
+            "不要替用户（我）说话；不要引入在场角色之外的说话者。"
+        )
     messages = [
         ChatMessage(role="system", content=system),
         *[

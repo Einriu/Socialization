@@ -1,5 +1,6 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
+  deletePracticeSession,
   evaluateSession,
   listPracticeMessages,
   listPracticeSessions,
@@ -10,12 +11,56 @@ import {
 import { Button } from "@/components/ui/button";
 import { ErrorText, TextArea } from "@/components/ui/field";
 import { matchRoute, useRouter } from "@/lib/router";
+import { extractRoleNames, type DetectedRole } from "@/lib/practice-roles";
 import { parseSse } from "@/utils/sse";
 
 const CHANNEL_LABELS: Record<string, string> = {
   online: "线上（微信等）",
   offline: "线下社交",
 };
+
+const SPEAKER_STYLES = [
+  {
+    avatar: "bg-sky-500",
+    name: "text-sky-600 dark:text-sky-400",
+    bubble: "border-sky-200 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/40",
+  },
+  {
+    avatar: "bg-emerald-500",
+    name: "text-emerald-600 dark:text-emerald-400",
+    bubble: "border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/40",
+  },
+  {
+    avatar: "bg-amber-500",
+    name: "text-amber-600 dark:text-amber-400",
+    bubble: "border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40",
+  },
+  {
+    avatar: "bg-violet-500",
+    name: "text-violet-600 dark:text-violet-400",
+    bubble: "border-violet-200 bg-violet-50 dark:border-violet-800 dark:bg-violet-950/40",
+  },
+  {
+    avatar: "bg-rose-500",
+    name: "text-rose-600 dark:text-rose-400",
+    bubble: "border-rose-200 bg-rose-50 dark:border-rose-800 dark:bg-rose-950/40",
+  },
+  {
+    avatar: "bg-teal-500",
+    name: "text-teal-600 dark:text-teal-400",
+    bubble: "border-teal-200 bg-teal-50 dark:border-teal-800 dark:bg-teal-950/40",
+  },
+] as const;
+
+type SpeakerStyle = (typeof SPEAKER_STYLES)[number];
+
+function speakerStyle(name: string): SpeakerStyle {
+  let hash = 0;
+  for (const ch of name) {
+    hash = (hash * 31 + (ch.codePointAt(0) ?? 0)) >>> 0;
+  }
+  return SPEAKER_STYLES[hash % SPEAKER_STYLES.length] ?? SPEAKER_STYLES[0];
+}
 
 export function PracticeSessionPage() {
   const { path, navigate } = useRouter();
@@ -33,6 +78,19 @@ export function PracticeSessionPage() {
     summary: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const isMulti = (sessionInfo?.participants.length ?? 0) > 1;
+  const roleNames = useMemo(() => {
+    const background = sessionInfo?.custom_prompt ?? "";
+    const conversation = messages.map((m) => m.content).join("\n");
+    return extractRoleNames(`${background}\n${conversation}`);
+  }, [sessionInfo?.custom_prompt, messages]);
+  const displayRoles =
+    roleNames.length > 0
+      ? roleNames
+      : (sessionInfo?.participants ?? []).map((p) => ({
+          name: p.name,
+          role: p.role,
+        }));
 
   useEffect(() => {
     let cancelled = false;
@@ -75,6 +133,29 @@ export function PracticeSessionPage() {
       setMessages(await listPracticeMessages(id));
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载消息失败");
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    const target = sessions.find((item) => item.id === id);
+    if (
+      !window.confirm(`确认删除会话「${target?.title ?? "该会话"}」？删除后不可恢复。`)
+    ) {
+      return;
+    }
+    try {
+      await deletePracticeSession(id);
+      const remaining = sessions.filter((item) => item.id !== id);
+      setSessions(remaining);
+      if (currentId === id) {
+        const next = remaining[0] ?? null;
+        setCurrentId(next ? next.id : null);
+        setSessionInfo(next ?? null);
+        setEvaluation(null);
+        setMessages(next ? await listPracticeMessages(next.id) : []);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "删除失败");
     }
   };
 
@@ -148,19 +229,29 @@ export function PracticeSessionPage() {
           <aside className="space-y-1">
             <h2 className="text-sm font-medium text-muted-foreground">历史会话</h2>
             {sessions.map((session) => (
-              <button
-                key={session.id}
-                type="button"
-                onClick={() => void openSession(session.id)}
-                className={`block w-full truncate rounded px-2 py-1.5 text-left text-sm ${
-                  currentId === session.id
-                    ? "bg-secondary font-medium"
-                    : "hover:bg-accent"
-                }`}
-              >
-                {session.title}
-                {session.status === "completed" ? "（已完成）" : ""}
-              </button>
+              <div key={session.id} className="group flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => void openSession(session.id)}
+                  className={`block min-w-0 flex-1 truncate rounded px-2 py-1.5 text-left text-sm ${
+                    currentId === session.id
+                      ? "bg-secondary font-medium"
+                      : "hover:bg-accent"
+                  }`}
+                >
+                  {session.title}
+                  {session.status === "completed" ? "（已完成）" : ""}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDelete(session.id)}
+                  aria-label={`删除会话 ${session.title}`}
+                  title="删除会话"
+                  className="rounded px-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus:opacity-100 group-hover:opacity-100"
+                >
+                  ×
+                </button>
+              </div>
             ))}
           </aside>
 
@@ -171,8 +262,15 @@ export function PracticeSessionPage() {
                   渠道：{CHANNEL_LABELS[sessionInfo.channel] ?? sessionInfo.channel}
                   {sessionInfo.tags.length > 0 && <> · 标签：{sessionInfo.tags.join("、")}</>}
                 </p>
-                {sessionInfo.participants.length > 0 && (
-                  <p>在场角色：{sessionInfo.participants.map((p) => p.name).join("、")}</p>
+                {displayRoles.length > 0 ? (
+                  <p>
+                    场景角色：
+                    {displayRoles
+                      .map((r) => (r.role ? `${r.name}（${r.role}）` : r.name))
+                      .join("、")}
+                  </p>
+                ) : (
+                  <p>场景角色：对方（未在场景中识别到明确角色名）</p>
                 )}
                 {sessionInfo.custom_prompt && (
                   <details>
@@ -188,16 +286,20 @@ export function PracticeSessionPage() {
             <div className="space-y-3 rounded-lg border bg-card p-4">
               {messages.length === 0 && (
                 <p className="text-center text-sm text-muted-foreground">
-                  开始练习后与 AI 角色对话，角色之间也会互相交流
+                  {isMulti
+                    ? "开始练习后与 AI 角色对话，角色之间也会互相交流"
+                    : "开始练习后与对方一对一对话"}
                 </p>
               )}
-              {messages.flatMap((message) => renderBubbles(message))}
+              {messages.flatMap((message) => renderBubbles(message, displayRoles))}
             </div>
 
             <form onSubmit={(e) => void send(e)} className="flex gap-2">
               <TextArea
                 className="min-h-16"
-                placeholder="输入你的回应，也可以暂时旁观角色们聊天…"
+                placeholder={
+                  isMulti ? "输入你的回应，也可以暂时旁观角色们聊天…" : "输入你的回应…"
+                }
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 disabled={streaming || !currentId}
@@ -234,27 +336,54 @@ export function PracticeSessionPage() {
   );
 }
 
-function renderBubbles(message: PracticeMessageItem): React.ReactNode[] {
+function renderBubbles(
+  message: PracticeMessageItem,
+  roles: DetectedRole[],
+): React.ReactNode[] {
   if (message.role === "user") {
     return [
-      <div key={message.id} className="flex justify-end">
-        <div className="max-w-[80%] whitespace-pre-wrap rounded-lg border bg-primary px-3 py-2 text-sm text-primary-foreground">
+      <div key={message.id} className="flex items-start justify-end gap-2">
+        <div className="max-w-[75%] whitespace-pre-wrap rounded-lg border bg-primary px-3 py-2 text-sm text-primary-foreground">
           {message.content}
+        </div>
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+          我
         </div>
       </div>,
     ];
   }
   const segments = splitBySpeaker(message.content);
-  return segments.map((segment, index) => (
-    <div key={`${message.id}-${index}`} className="flex justify-start">
-      <div className="max-w-[80%] whitespace-pre-wrap rounded-lg border bg-background px-3 py-2 text-sm">
-        {segment.speaker && (
-          <span className="mr-1 text-xs font-medium text-primary">{segment.speaker}</span>
-        )}
-        {segment.text}
+  return segments.map((segment, index) => {
+    const speaker = resolveSpeaker(segment.speaker, roles);
+    const style = speakerStyle(speaker.name);
+    const label = speaker.role ? `${speaker.name}（${speaker.role}）` : speaker.name;
+    return (
+      <div key={`${message.id}-${index}`} className="flex items-start gap-2">
+        <div
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${style.avatar}`}
+        >
+          {speaker.name.slice(0, 1)}
+        </div>
+        <div className={`max-w-[75%] rounded-lg border px-3 py-2 text-sm ${style.bubble}`}>
+          <p className={`mb-0.5 text-xs font-semibold ${style.name}`}>{label}</p>
+          <p className="whitespace-pre-wrap">{segment.text}</p>
+        </div>
       </div>
-    </div>
-  ));
+    );
+  });
+}
+
+function resolveSpeaker(raw: string | undefined, roles: DetectedRole[]): DetectedRole {
+  if (raw) {
+    const match = roles.find(
+      (role) => raw.includes(role.name) || role.name.includes(raw),
+    );
+    if (match) {
+      return match;
+    }
+    return { name: raw };
+  }
+  return roles[0] ?? { name: "对方" };
 }
 
 function splitBySpeaker(content: string): { speaker?: string; text: string }[] {

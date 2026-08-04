@@ -184,6 +184,58 @@ def test_practice_custom_session_injects_person_info(
     assert "朋友" in system
 
 
+def test_practice_prompt_mode_matches_participant_count(
+    client: TestClient, monkeypatch: object
+) -> None:
+    """单人会话使用一对一规则，多人会话使用多角色规则。"""
+    fake = FakeChat(stream_chunks=["好的"])
+    _patch_chat(monkeypatch, fake)
+
+    def system_of(request: object) -> str:
+        messages = getattr(request, "messages", [])
+        return messages[0].content if messages else ""
+
+    single = client.post(
+        "/api/practice/sessions",
+        json={
+            "channel": "offline",
+            "custom_prompt": "单独见面",
+            "participants": [{"name": "小王", "role": "朋友"}],
+        },
+    ).json()["data"]
+    client.post(
+        f"/api/practice/sessions/{single['id']}/messages",
+        json={"content": "你好"},
+    )
+    single_system = system_of(fake.requests[0])
+    assert "一对一的对话" in single_system
+    assert "不要自言自语" in single_system
+    assert "不要连续输出多段独白" in single_system
+    assert "主动提出" in single_system
+    assert "一次回复可以包含多个角色的连续发言" not in single_system
+
+    multi = client.post(
+        "/api/practice/sessions",
+        json={
+            "channel": "offline",
+            "custom_prompt": "多人聚会",
+            "participants": [
+                {"name": "小王", "role": "朋友"},
+                {"name": "小李", "role": "同学"},
+            ],
+        },
+    ).json()["data"]
+    client.post(
+        f"/api/practice/sessions/{multi['id']}/messages",
+        json={"content": "大家好"},
+    )
+    multi_system = system_of(fake.requests[1])
+    assert "在场角色：小王（朋友）、小李（同学）" in multi_system
+    assert "【角色名】" in multi_system
+    assert "互相交谈" in multi_system
+    assert "主动提出与自己的生活" in multi_system
+
+
 def test_multiple_custom_scenarios_allowed(
     client: TestClient,
 ) -> None:
@@ -199,6 +251,23 @@ def test_multiple_custom_scenarios_allowed(
     assert first.status_code == 200
     assert second.status_code == 200
     assert first.json()["data"]["id"] != second.json()["data"]["id"]
+
+
+def test_delete_practice_session_removes_history(client: TestClient) -> None:
+    """删除练习会话后，列表不再出现，且二次删除返回 404。"""
+    session = client.post(
+        "/api/practice/sessions",
+        json={"channel": "offline", "custom_prompt": "待删除会话"},
+    ).json()["data"]
+    sid = session["id"]
+
+    resp = client.delete(f"/api/practice/sessions/{sid}")
+    assert resp.status_code == 204
+    sessions = client.get("/api/practice/sessions").json()["data"]
+    assert all(item["id"] != sid for item in sessions)
+
+    missing = client.delete(f"/api/practice/sessions/{sid}")
+    assert missing.status_code == 404
 
 
 def test_review_answer_schedules_next(client: TestClient) -> None:

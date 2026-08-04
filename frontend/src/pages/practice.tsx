@@ -111,9 +111,10 @@ export function PracticePage() {
     }
   };
 
-  const startPractice = async () => {
-    if (!background.trim()) {
-      setError("请先生成社交背景");
+  const startPractice = async (direct: boolean) => {
+    const prompt = direct ? customPrompt.trim() : background.trim();
+    if (!prompt) {
+      setError(direct ? "请先填写自定义提示词" : "请先生成社交背景");
       return;
     }
     setStarting(true);
@@ -129,7 +130,7 @@ export function PracticePage() {
       const created = await createPracticeSession(null, {
         channel,
         tags: mode === "tags" ? allTags : [],
-        custom_prompt: background,
+        custom_prompt: prompt,
         participants,
       });
       navigate(`/practice/session/${created.id}`);
@@ -316,8 +317,13 @@ export function PracticePage() {
           <Button onClick={() => void runGenerate()} disabled={generating || !canGenerate}>
             {generating ? "生成中…" : "生成社交背景"}
           </Button>
+          {mode === "custom" && customPrompt.trim() && (
+            <Button variant="outline" onClick={() => void startPractice(true)} disabled={starting}>
+              {starting ? "创建中…" : "直接用提示词开始练习"}
+            </Button>
+          )}
           {background && (
-            <Button variant="outline" onClick={() => void startPractice()} disabled={starting}>
+            <Button variant="outline" onClick={() => void startPractice(false)} disabled={starting}>
               {starting ? "创建中…" : "基于此背景开始练习"}
             </Button>
           )}
@@ -325,10 +331,12 @@ export function PracticePage() {
 
         {background && (
           <div className="space-y-1">
-            <p className="text-sm font-medium text-muted-foreground">生成的场景背景</p>
-            <p className="whitespace-pre-wrap rounded border bg-background p-3 text-sm">
-              {background}
-            </p>
+            <p className="text-sm font-medium text-muted-foreground">生成的场景背景（可直接修改）</p>
+            <TextArea
+              className="min-h-36"
+              value={background}
+              onChange={(e) => setBackground(e.target.value)}
+            />
           </div>
         )}
       </section>

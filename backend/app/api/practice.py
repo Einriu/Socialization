@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -114,6 +114,14 @@ def messages(session_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
             for item in items
         ]
     )
+
+
+@router.delete("/practice/sessions/{session_id}")
+def delete_session(
+    session_id: uuid.UUID, db: Session = Depends(get_db)
+) -> Response:
+    practice_service.delete_session(db, session_id)
+    return Response(status_code=204)
 
 
 @router.post("/practice/sessions/{session_id}/messages")

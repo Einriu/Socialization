@@ -127,6 +127,10 @@ export function listPracticeSessions(): Promise<PracticeSessionInfo[]> {
   return request<PracticeSessionInfo[]>("/api/practice/sessions");
 }
 
+export function deletePracticeSession(sessionId: string): Promise<void> {
+  return request(`/api/practice/sessions/${sessionId}`, { method: "DELETE" });
+}
+
 export interface PracticeMessageItem {
   id: string;
   role: string;
