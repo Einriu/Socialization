@@ -23,6 +23,21 @@ describe("extractRoleNames", () => {
     expect(roles[0]?.name).toBe("小王");
   });
 
+  it("解析结构化背景的【角色】小节", () => {
+    const text =
+      "【角色】\n- 小王（市场部新人）：性格开朗\n- 小李（同学）：话不多\n" +
+      "【背景故事】\n公司年会，大家聚在一起聊天。";
+    const roles = extractRoleNames(text);
+    expect(roles.map((r) => r.name)).toEqual(["小王", "小李"]);
+    expect(roles[0]?.role).toBe("市场部新人");
+  });
+
+  it("识别【角色】小节中无括号的角色名", () => {
+    const text = "【角色】\n- 小王：性格开朗\n【背景故事】\n公司年会。";
+    const roles = extractRoleNames(text);
+    expect(roles.map((r) => r.name)).toContain("小王");
+  });
+
   it("过滤通用称谓", () => {
     const roles = extractRoleNames("朋友（性格开朗）和同事（工作很拼）都在场。");
     expect(roles).toEqual([]);

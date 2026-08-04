@@ -42,6 +42,7 @@ class BackgroundGenerate(BaseModel):
     tags: list[str] = Field(default_factory=list)
     custom_prompt: str | None = None
     person_ids: list[uuid.UUID] = Field(default_factory=list)
+    roles: list[dict] = Field(default_factory=list)
 
 
 class PracticeSend(BaseModel):

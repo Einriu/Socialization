@@ -9,6 +9,7 @@ const NAME_STOPWORDS = new Set([
   "场景", "背景", "气氛", "氛围", "状态", "情绪", "话题", "冲突", "机会",
   "现场", "关系", "印象", "开场", "破冰", "我", "你", "他", "她",
   "现在", "时候", "事情", "问题", "感受", "心情", "故事", "反应",
+  "角色", "背景故事",
 ]);
 
 function isValidName(name: string): boolean {
@@ -56,6 +57,12 @@ export function extractRoleNames(text: string): DetectedRole[] {
     for (const match of text.matchAll(pattern)) {
       add(match[1] ?? "", match[2]);
     }
+  }
+  // 结构化背景中的【角色】小节：- 角色名：描述
+  const rolesSection = text.match(/【角色】([\s\S]*?)(?=【|$)/)?.[1] ?? "";
+  const bulletPattern = /(?:^|\n)[ \t]*[-•·][ \t]*([^：:（【】]{1,10})[：:]/g;
+  for (const match of rolesSection.matchAll(bulletPattern)) {
+    add(match[1] ?? "", undefined);
   }
   return [...found.values()]
     .sort((a, b) => b.count - a.count)

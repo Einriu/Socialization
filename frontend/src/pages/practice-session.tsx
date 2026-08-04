@@ -1,10 +1,17 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 import {
   deletePracticeSession,
   evaluateSession,
   listPracticeMessages,
   listPracticeSessions,
   practiceSendStream,
+  suggestReplies,
   type PracticeMessageItem,
   type PracticeSessionInfo,
 } from "@/api/p2";
@@ -78,6 +85,8 @@ export function PracticeSessionPage() {
     summary: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggesting, setSuggesting] = useState(false);
   const isMulti = (sessionInfo?.participants.length ?? 0) > 1;
   const roleNames = useMemo(() => {
     const background = sessionInfo?.custom_prompt ?? "";
@@ -159,15 +168,14 @@ export function PracticeSessionPage() {
     }
   };
 
-  const send = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!currentId || !input.trim() || streaming) {
+  const sendMessage = async (content: string) => {
+    if (!currentId || !content.trim() || streaming) {
       return;
     }
     const userMessage: PracticeMessageItem = {
       id: `local-${Date.now()}`,
       role: "user",
-      content: input.trim(),
+      content: content.trim(),
     };
     const assistantMessage: PracticeMessageItem = {
       id: `local-ai-${Date.now()}`,
@@ -176,6 +184,7 @@ export function PracticeSessionPage() {
     };
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
     setInput("");
+    setSuggestions([]);
     setStreaming(true);
     try {
       const response = await practiceSendStream(currentId, userMessage.content);
@@ -194,6 +203,39 @@ export function PracticeSessionPage() {
       setError(err instanceof Error ? err.message : "发送失败");
     } finally {
       setStreaming(false);
+    }
+  };
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    void sendMessage(input);
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (
+      e.key === "Enter" &&
+      !e.shiftKey &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !e.altKey
+    ) {
+      e.preventDefault();
+      void sendMessage(input);
+    }
+  };
+
+  const suggest = async () => {
+    if (!currentId || streaming) {
+      return;
+    }
+    setSuggesting(true);
+    setError(null);
+    try {
+      setSuggestions(await suggestReplies(currentId));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "生成建议失败");
+    } finally {
+      setSuggesting(false);
     }
   };
 
@@ -294,7 +336,58 @@ export function PracticeSessionPage() {
               {messages.flatMap((message) => renderBubbles(message, displayRoles))}
             </div>
 
-            <form onSubmit={(e) => void send(e)} className="flex gap-2">
+            {currentId && !streaming && messages.length > 0 && (
+              <div className="flex items-center justify-between">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void suggest()}
+                  disabled={suggesting}
+                >
+                  {suggesting ? "生成中…" : "AI 帮回"}
+                </Button>
+              </div>
+            )}
+            {suggestions.length > 0 && (
+              <div className="space-y-2 rounded-lg border bg-card p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-muted-foreground">
+                    AI 帮回（点击直接发送，也可以自己输入）
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => void suggest()}
+                      disabled={suggesting}
+                    >
+                      换一批
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => setSuggestions([])}
+                    >
+                      收起
+                    </button>
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  {suggestions.map((text, index) => (
+                    <button
+                      key={`${index}-${text}`}
+                      type="button"
+                      onClick={() => void sendMessage(text)}
+                      className="rounded border bg-background p-2 text-left text-sm hover:bg-accent"
+                    >
+                      {text}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="flex gap-2">
               <TextArea
                 className="min-h-16"
                 placeholder={
@@ -302,12 +395,16 @@ export function PracticeSessionPage() {
                 }
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
                 disabled={streaming || !currentId}
               />
               <Button type="submit" disabled={streaming || !input.trim()}>
                 {streaming ? "对话中…" : "发送"}
               </Button>
             </form>
+            <p className="text-right text-xs text-muted-foreground">
+              Enter 发送 · Ctrl+Enter 换行
+            </p>
 
             {currentId && !streaming && (
               <Button variant="outline" onClick={() => void evaluate()}>

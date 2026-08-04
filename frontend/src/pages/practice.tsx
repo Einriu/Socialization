@@ -18,6 +18,28 @@ const CHANNELS = [
 
 type Channel = (typeof CHANNELS)[number]["value"];
 
+function parseCustomRoles(text: string): { name: string; role?: string }[] {
+  const roles: { name: string; role?: string }[] = [];
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const paren = trimmed.match(/^(.{1,20})[（(]([^）)]{1,30})[）)]$/);
+    if (paren && paren[1] && paren[2]) {
+      roles.push({ name: paren[1].trim(), role: paren[2].trim() });
+      continue;
+    }
+    const colon = trimmed.match(/^(.{1,20})[：:](.+)$/);
+    if (colon && colon[1]) {
+      roles.push({ name: colon[1].trim(), role: colon[2]?.trim() });
+      continue;
+    }
+    roles.push({ name: trimmed });
+  }
+  return roles;
+}
+
 export function PracticePage() {
   const { navigate } = useRouter();
   const [persons, setPersons] = useState<Person[]>([]);
@@ -30,6 +52,7 @@ export function PracticePage() {
   const [customTags, setCustomTags] = useState<string[]>([]);
   const [customTagInput, setCustomTagInput] = useState("");
   const [selectedPersons, setSelectedPersons] = useState<string[]>([]);
+  const [customRoles, setCustomRoles] = useState("");
   const [customPrompt, setCustomPrompt] = useState("");
   const [background, setBackground] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -88,9 +111,12 @@ export function PracticePage() {
   };
 
   const allTags = [...selectedTags, ...customTags];
+  const customRoleList = parseCustomRoles(customRoles);
   const canGenerate =
     mode === "custom"
-      ? customPrompt.trim().length > 0 || selectedPersons.length > 0
+      ? customPrompt.trim().length > 0 ||
+        customRoleList.length > 0 ||
+        selectedPersons.length > 0
       : allTags.length > 0 || selectedPersons.length > 0;
 
   const runGenerate = async () => {
@@ -102,6 +128,7 @@ export function PracticePage() {
         tags: mode === "tags" ? allTags : [],
         custom_prompt: mode === "custom" ? customPrompt : null,
         person_ids: selectedPersons,
+        roles: mode === "custom" ? customRoleList : [],
       });
       setBackground(text);
     } catch (e) {
@@ -112,21 +139,27 @@ export function PracticePage() {
   };
 
   const startPractice = async (direct: boolean) => {
-    const prompt = direct ? customPrompt.trim() : background.trim();
+    const prompt = direct
+      ? customPrompt.trim() || customRoles.trim()
+      : background.trim();
     if (!prompt) {
-      setError(direct ? "请先填写自定义提示词" : "请先生成社交背景");
+      setError(direct ? "请先填写角色或社交背景描述" : "请先生成社交背景");
       return;
     }
     setStarting(true);
     setError(null);
     try {
-      const participants = persons
+      const libraryParticipants = persons
         .filter((person) => selectedPersons.includes(person.id))
         .map((person) => ({
           name: person.name,
           role: person.relationship_type ?? "在场者",
           person_id: person.id,
         }));
+      const participants = [
+        ...(mode === "custom" ? customRoleList : []),
+        ...libraryParticipants,
+      ];
       const created = await createPracticeSession(null, {
         channel,
         tags: mode === "tags" ? allTags : [],
@@ -271,14 +304,32 @@ export function PracticePage() {
               </p>
             </div>
           ) : (
-            <TextArea
-              placeholder="用一两句话描述你的社交场景，例如：公司年会，我作为新人第一次参加，想认识市场部的小王……"
-              value={customPrompt}
-              onChange={(e) => {
-                invalidateBackground();
-                setCustomPrompt(e.target.value);
-              }}
-            />
+            <div className="space-y-3">
+              <div>
+                <p className="mb-1 text-sm text-muted-foreground">
+                  角色（每行一个，可写 名字（身份/关系））
+                </p>
+                <TextArea
+                  placeholder={"小王（市场部新人）\n小李（我的同学）"}
+                  value={customRoles}
+                  onChange={(e) => {
+                    invalidateBackground();
+                    setCustomRoles(e.target.value);
+                  }}
+                />
+              </div>
+              <div>
+                <p className="mb-1 text-sm text-muted-foreground">社交背景描述</p>
+                <TextArea
+                  placeholder="用一两句话描述你的社交场景，例如：公司年会，我作为新人第一次参加，想认识市场部的小王……"
+                  value={customPrompt}
+                  onChange={(e) => {
+                    invalidateBackground();
+                    setCustomPrompt(e.target.value);
+                  }}
+                />
+              </div>
+            </div>
           )}
         </div>
 
@@ -317,7 +368,7 @@ export function PracticePage() {
           <Button onClick={() => void runGenerate()} disabled={generating || !canGenerate}>
             {generating ? "生成中…" : "生成社交背景"}
           </Button>
-          {mode === "custom" && customPrompt.trim() && (
+          {mode === "custom" && (customPrompt.trim() || customRoleList.length > 0) && (
             <Button variant="outline" onClick={() => void startPractice(true)} disabled={starting}>
               {starting ? "创建中…" : "直接用提示词开始练习"}
             </Button>

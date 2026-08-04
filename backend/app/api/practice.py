@@ -136,3 +136,11 @@ def send_message(
 async def evaluate(session_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
     result = await practice_service.evaluate_session(db, session_id)
     return success_response(result)
+
+
+@router.post("/practice/sessions/{session_id}/suggest-replies")
+async def suggest_replies(
+    session_id: uuid.UUID, db: Session = Depends(get_db)
+) -> dict:
+    suggestions = await practice_service.suggest_replies(db, session_id)
+    return success_response({"suggestions": suggestions})

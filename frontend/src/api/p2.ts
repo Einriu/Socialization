@@ -70,6 +70,7 @@ export function generateBackground(input: {
   tags?: string[];
   custom_prompt?: string | null;
   person_ids?: string[];
+  roles?: { name: string; role?: string }[];
 }): Promise<string> {
   return request<{ background: string }>("/api/practice/generate-background", {
     method: "POST",
@@ -153,6 +154,13 @@ export function evaluateSession(
   sessionId: string,
 ): Promise<{ scores: Record<string, number>; summary: string }> {
   return request(`/api/practice/sessions/${sessionId}/evaluate`, { method: "POST" });
+}
+
+export function suggestReplies(sessionId: string): Promise<string[]> {
+  return request<{ suggestions: string[] }>(
+    `/api/practice/sessions/${sessionId}/suggest-replies`,
+    { method: "POST" },
+  ).then((data) => data.suggestions);
 }
 
 export interface ReviewItem {

@@ -236,6 +236,34 @@ def test_practice_prompt_mode_matches_participant_count(
     assert "主动提出与自己的生活" in multi_system
 
 
+def test_practice_background_uses_custom_roles(
+    client: TestClient, monkeypatch: object
+) -> None:
+    """背景扩写提示词包含自定义角色，并要求【角色】/【背景故事】结构化输出。"""
+    fake = FakeChat(
+        text="【角色】\n- 小王（市场部新人）：性格开朗\n"
+        "【背景故事】\n公司年会，大家聚在一起聊天。"
+    )
+    _patch_chat(monkeypatch, fake)
+    resp = client.post(
+        "/api/practice/generate-background",
+        json={
+            "channel": "offline",
+            "tags": ["朋友聚会"],
+            "custom_prompt": "公司年会，我作为新人第一次参加",
+            "roles": [{"name": "小王", "role": "市场部新人"}],
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["background"].startswith("【角色】")
+    prompt = fake.requests[0].messages[1].content
+    assert "角色对象（用户自定义）" in prompt
+    assert "小王（市场部新人）" in prompt
+    assert "社交背景描述" in prompt
+    assert "【角色】" in prompt
+    assert "【背景故事】" in prompt
+
+
 def test_multiple_custom_scenarios_allowed(
     client: TestClient,
 ) -> None:
@@ -268,6 +296,34 @@ def test_delete_practice_session_removes_history(client: TestClient) -> None:
 
     missing = client.delete(f"/api/practice/sessions/{sid}")
     assert missing.status_code == 404
+
+
+def test_practice_suggest_replies(client: TestClient, monkeypatch: object) -> None:
+    """AI 帮回：站在用户视角返回 3 条不同回复建议。"""
+    fake = FakeChat(
+        text='["直接问：你最近项目进展怎么样？", '
+        '"听你这么说，最近是不是压力很大？", '
+        '"哈哈，那你周末打算怎么安排？"]'
+    )
+    _patch_chat(monkeypatch, fake)
+    session = client.post(
+        "/api/practice/sessions",
+        json={"channel": "offline", "custom_prompt": "朋友聊天"},
+    ).json()["data"]
+
+    empty = client.post(f"/api/practice/sessions/{session['id']}/suggest-replies")
+    assert empty.status_code == 400
+
+    client.post(
+        f"/api/practice/sessions/{session['id']}/messages",
+        json={"content": "最近怎么样？"},
+    )
+    resp = client.post(f"/api/practice/sessions/{session['id']}/suggest-replies")
+    assert resp.status_code == 200
+    suggestions = resp.json()["data"]["suggestions"]
+    assert len(suggestions) == 3
+    assert "项目进展" in suggestions[0]
+    assert all(isinstance(item, str) for item in suggestions)
 
 
 def test_review_answer_schedules_next(client: TestClient) -> None:

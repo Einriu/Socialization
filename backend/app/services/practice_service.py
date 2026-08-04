@@ -129,11 +129,24 @@ def create_custom_scenario(db: Session, data: PracticeScenarioCreate) -> Practic
 
 
 async def generate_background(db: Session, data: BackgroundGenerate) -> str:
-    """根据渠道、标签、人物对象或自定义提示词，生成详细的社交背景故事。"""
+    """根据渠道、标签、自定义角色、人物对象或背景描述，生成结构化社交背景。"""
     lines = [
         f"交流渠道：{CHANNEL_LABELS.get(data.channel, data.channel)}",
         f"场景标签：{'、'.join(data.tags) if data.tags else '（未指定）'}",
     ]
+    if data.roles:
+        role_lines = []
+        for item in data.roles:
+            if not isinstance(item, dict):
+                continue
+            name = (item.get("name") or "").strip()
+            if not name:
+                continue
+            role = (item.get("role") or "").strip()
+            role_lines.append(f"- {name}（{role}）" if role else f"- {name}")
+        if role_lines:
+            lines.append("角色对象（用户自定义）：")
+            lines.extend(role_lines)
     if data.person_ids:
         person_lines = [
             summary
@@ -143,11 +156,15 @@ async def generate_background(db: Session, data: BackgroundGenerate) -> str:
         lines.append("参与对象（来自我的人物库）：")
         lines.extend(person_lines)
     if data.custom_prompt:
-        lines.append(f"自定义场景描述：{data.custom_prompt}")
+        lines.append(f"社交背景描述：{data.custom_prompt}")
     prompt = "\n".join(lines) + (
-        "\n请基于以上信息，详细扩建一个社交场景背景故事，包括："
-        "场景背景与气氛、在场人物及其状态/情绪/对我的态度、彼此的谈话背景故事、"
-        "可能的冲突点与破冰切入点。用自然、具体的中文描述。"
+        "\n请基于以上信息生成一份社交背景，必须严格按以下格式输出，不要输出其他内容：\n"
+        "【角色】\n"
+        "- 角色名（身份/关系）：人物特征、当前状态/情绪、对我的态度"
+        "（每个在场角色一行，主要对象在前）\n"
+        "【背景故事】\n"
+        "（用自然、具体的中文写 150-300 字：场景背景与气氛、彼此之间的谈话背景故事、"
+        "可能的冲突点与破冰切入点）"
     )
     return await _chat(db, "practice", prompt)
 
@@ -348,3 +365,78 @@ async def evaluate_session(db: Session, session_id: uuid.UUID) -> dict:
     session.status = "completed"
     db.flush()
     return {"scores": scores, "summary": summary}
+
+
+async def suggest_replies(db: Session, session_id: uuid.UUID) -> list[str]:
+    """站在用户视角，为当前对话生成 3 个下一步回复建议。"""
+    session = db.get(PracticeSession, session_id)
+    if session is None:
+        raise AppError("NOT_FOUND", "会话不存在", status_code=404)
+    scenario = (
+        db.get(PracticeScenario, session.scenario_id)
+        if session.scenario_id is not None
+        else None
+    )
+    history = list_messages(db, session_id)
+    if not history:
+        raise AppError(
+            "BAD_REQUEST", "还没有对话，先和角色聊几句再使用 AI 帮回", status_code=400
+        )
+    channel_text = CHANNEL_LABELS.get(session.channel, session.channel)
+    scenario_text = session.custom_prompt
+    if not scenario_text and scenario is not None:
+        scenario_text = scenario.description or scenario.title
+    participants = session.participants
+    if not participants and scenario is not None:
+        participants = scenario.participants
+    if not participants:
+        participants = [{"name": "对方"}]
+    role_names: list[str] = []
+    for item in participants:
+        if isinstance(item, dict):
+            name = item.get("name") or "对方"
+            role = item.get("role")
+            role_names.append(f"{name}（{role}）" if role else name)
+        else:
+            role_names.append(str(item))
+    transcript = "\n".join(
+        f"{'我：' if item.role == 'user' else '对方：'}{item.content}"
+        for item in history
+    )
+    prompt = (
+        f"你正在帮助用户（我）在一场社交练习中回复。\n"
+        f"渠道：{channel_text}。\n"
+        f"场景：{scenario_text or '（未提供）'}。\n"
+        f"在场角色：{'、'.join(role_names) or '对方'}。\n"
+        f"对话记录：\n{transcript}\n\n"
+        "请站在用户（我）的视角，给出 3 个不同的下一步回复建议。要求：\n"
+        "1. 每条 1-2 句，口语化，符合“我”的身份、立场和当前情绪；\n"
+        "2. 三条策略不同（例如：直接推进话题、共情追问、轻松化解等）；\n"
+        "3. 不要替对方说话，不要使用【角色名】前缀；\n"
+        "4. 只输出 JSON 数组，如 [\"建议一\", \"建议二\", \"建议三\"]，不要输出其他文字。"
+    )
+    adapter, model_id = _resolve_chat(db)
+    try:
+        response = await adapter.chat(
+            ChatRequest(
+                model=model_id,
+                messages=[ChatMessage(role="user", content=prompt)],
+            )
+        )
+    except ProviderError as exc:
+        raise AppError("AI_PROVIDER_ERROR", str(exc), status_code=400) from exc
+    raw = response.content.strip()
+    try:
+        start = raw.find("[")
+        end = raw.rfind("]") + 1
+        parsed = json.loads(raw[start:end])
+    except (ValueError, json.JSONDecodeError):
+        raise AppError(
+            "AI_PROVIDER_ERROR", "AI 帮回返回格式无法解析", status_code=400
+        ) from None
+    suggestions = [
+        str(item).strip() for item in parsed if isinstance(item, str) and item.strip()
+    ]
+    if not suggestions:
+        raise AppError("AI_PROVIDER_ERROR", "AI 帮回没有生成有效建议", status_code=400)
+    return suggestions[:3]
